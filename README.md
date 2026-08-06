@@ -8,6 +8,15 @@ No cloud, no login, no subscriptions. Everything runs on your machine and your G
 
 ---
 
+## 🎥 Samples
+
+- **[▶ 25-second native generation](samples/sample-25s-native.mp4)** — a single clip generated at 25 s native length (video + audio, no stitching).
+- **[▶ 2.5K native generation](samples/sample-2.5k.mp4)** — a clip generated at ~2.5K native resolution.
+
+_(GitHub shows these as downloadable/playable files — click to watch.)_
+
+---
+
 ## ✨ Features
 
 - **Chat-style creator** (`/new`) — black canvas + bottom composer. Write a prompt, get a video with audio.

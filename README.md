@@ -6,6 +6,10 @@ No cloud, no login, no subscriptions. Everything runs on your machine and your G
 
 > _Una app local para generar video + audio con IA sobre tu propio ComfyUI. Sin nube, sin cuentas, todo en tu máquina._
 
+<p align="center">
+  <img src="assets/screenshot.png" alt="MiniMax H3 Studio — chat-style creator with a generated video, projects, and one-click accelerators" width="100%">
+</p>
+
 ---
 
 ## 🎥 Samples

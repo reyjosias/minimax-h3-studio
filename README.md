@@ -10,10 +10,28 @@ No cloud, no login, no subscriptions. Everything runs on your machine and your G
 
 ## 🎥 Samples
 
-- **[▶ 25-second native generation](samples/sample-25s-native.mp4)** — a single clip generated at 25 s native length (video + audio, no stitching).
-- **[▶ 2.5K native generation](samples/sample-2.5k.mp4)** — a clip generated at ~2.5K native resolution.
+<table>
+<tr>
+<td width="50%" align="center">
 
-_(GitHub shows these as downloadable/playable files — click to watch.)_
+[![25-second native generation](samples/poster-25s.jpg)](samples/sample-25s-native.mp4)
+
+**▶ [25-second native generation](samples/sample-25s-native.mp4)**<br>
+Single clip at 25 s native length (video + audio, no stitching).
+
+</td>
+<td width="50%" align="center">
+
+[![2.5K native generation](samples/poster-2.5k.jpg)](samples/sample-2.5k.mp4)
+
+**▶ [2.5K native generation](samples/sample-2.5k.mp4)**<br>
+Clip generated at ~2.5K native resolution.
+
+</td>
+</tr>
+</table>
+
+_Click a thumbnail to play._
 
 ---
 

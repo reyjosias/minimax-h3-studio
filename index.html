@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MiniMax H3 Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#070809;--bg2:#0b0d10;--panel:#101319;--panel2:#161a21;--panel3:#1b2028;
+    --line:#242a34;--line-soft:#1a1f27;--text:#eef1f5;--muted:#8a93a2;--muted2:#5f6875;
+    --accent:#f0b45a;--accent2:#ffd694;--accentd:#c78a37;--ok:#5fd08a;--danger:#f0706f;
+    --r:14px;color-scheme:dark}
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);
+    min-height:100dvh;background:
+      radial-gradient(1100px 500px at 78% -8%,rgba(240,180,90,.10),transparent 60%),
+      radial-gradient(900px 500px at 10% 110%,rgba(120,140,200,.06),transparent 55%),var(--bg);
+    -webkit-font-smoothing:antialiased}
+  button,input,textarea,select{font:inherit;color:inherit}
+  button{cursor:pointer;border:0;background:none}
+  img,video{max-width:100%} a{color:var(--accent);text-decoration:none}
+  ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:#2a313c;border-radius:6px}
+
+  /* ── header ── */
+  header{display:flex;align-items:center;gap:13px;padding:13px 22px;position:sticky;top:0;z-index:6;
+    background:linear-gradient(180deg,rgba(7,8,9,.92),rgba(7,8,9,.7));backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--line-soft)}
+  .logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#231a08;font-weight:800;
+    font-size:13px;background:linear-gradient(150deg,var(--accent2),var(--accent));box-shadow:0 6px 20px rgba(240,180,90,.28)}
+  header h1{font-size:14px;letter-spacing:.16em;margin:0;font-weight:700}
+  header small{display:block;color:var(--muted);font-size:8.5px;letter-spacing:.22em;margin-top:2px}
+  header .sp{flex:1}
+  .hbtn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--text);border-radius:10px;padding:9px 14px;font-size:13px;transition:.15s}
+  .hbtn:hover{border-color:var(--accent);background:var(--panel3)}
+
+  /* ── layout ── */
+  .wrap{max-width:1240px;margin:0 auto;padding:20px;display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;align-items:start}
+  @media(max-width:920px){.wrap{grid-template-columns:minmax(0,1fr)}}
+  .stagewrap{display:flex;flex-direction:column;gap:12px;position:sticky;top:78px}
+  @media(max-width:920px){.stagewrap{position:static}}
+
+  /* ── stage / preview ── */
+  .stage{background:linear-gradient(160deg,#0c0e12,#08090b);border:1px solid var(--line);border-radius:18px;
+    overflow:hidden;min-height:420px;display:grid;place-items:center;position:relative;
+    box-shadow:0 30px 80px -40px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.02)}
+  .stage video{width:100%;height:100%;max-height:72vh;display:block;object-fit:contain;background:#000}
+  .empty{color:var(--muted);text-align:center;padding:48px 30px}
+  .empty .mk{width:76px;height:76px;border-radius:20px;display:grid;place-items:center;margin:0 auto 18px;
+    font-size:32px;color:var(--accent);background:radial-gradient(circle at 50% 30%,rgba(240,180,90,.14),transparent 70%);
+    border:1px solid var(--line)}
+  .empty h2{color:var(--text);margin:0 0 8px;font-size:19px;font-weight:650}
+  .empty p{margin:0 auto;max-width:380px;font-size:13px;line-height:1.6}
+
+  .prog{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:15px;
+    background:radial-gradient(circle at 50% 40%,rgba(12,14,18,.82),rgba(7,8,9,.94));padding:24px;text-align:center}
+  .ring{width:134px;height:134px;border-radius:50%;
+    background:conic-gradient(var(--accent) calc(var(--p,0)*1%),#20252e 0);display:grid;place-items:center;
+    transition:background .4s ease;box-shadow:0 0 40px -8px rgba(240,180,90,.4)}
+  .ring div{width:110px;height:110px;border-radius:50%;background:var(--bg2);display:grid;place-items:center;
+    font-size:29px;font-weight:750;letter-spacing:.02em}
+  .prog .st{font-size:15px;font-weight:600}
+  .prog .rem{color:var(--accent);font-size:14px;font-weight:650;min-height:18px}
+  .prog .sub{font-size:11.5px;color:var(--muted)}
+  .prog .btns{display:flex;gap:9px;margin-top:8px}
+  .pbtn{min-height:40px;padding:0 17px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--text);font-size:13px;transition:.15s}
+  .pbtn:hover{border-color:var(--accent)}
+  .pbtn.danger:hover{border-color:var(--danger);color:var(--danger)}
+
+  .resultbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:2px}
+  .resultbar .tag{color:var(--ok);font-size:11.5px;letter-spacing:.06em;font-weight:600;margin-right:2px}
+  .resultbar a,.resultbar button{border:1px solid var(--line);background:var(--panel2);color:var(--text);
+    border-radius:10px;padding:9px 13px;font-size:12.5px;display:inline-flex;gap:6px;align-items:center;transition:.15s}
+  .resultbar a:hover,.resultbar button:hover{border-color:var(--accent);background:var(--panel3)}
+
+  /* ── composer panel ── */
+  .panel{background:linear-gradient(180deg,var(--panel),#0e1116);border:1px solid var(--line);border-radius:18px;
+    padding:16px;display:flex;flex-direction:column;gap:14px;
+    box-shadow:0 20px 60px -40px rgba(0,0,0,.9)}
+  .seg{display:flex;gap:5px;background:var(--bg2);padding:5px;border-radius:12px;border:1px solid var(--line-soft)}
+  .seg button{flex:1;color:var(--muted);padding:10px 6px;border-radius:9px;font-size:13px;font-weight:550;transition:.15s}
+  .seg button:hover{color:var(--text)}
+  .seg button.on{background:linear-gradient(150deg,var(--accent2),var(--accent));color:#231a08;font-weight:700;
+    box-shadow:0 4px 14px -4px rgba(240,180,90,.5)}
+
+  .lbl{font-size:11px;color:var(--muted);letter-spacing:.05em;font-weight:600;margin-bottom:7px;display:block}
+  .lbl .tip{color:var(--muted2);font-weight:400;letter-spacing:0}
+  .promptbox{position:relative}
+  textarea{width:100%;min-height:118px;resize:vertical;padding:13px;border-radius:13px;border:1px solid var(--line);
+    background:var(--bg2);font-size:13.5px;line-height:1.5;transition:.15s}
+  textarea:focus{outline:0;border-color:var(--accentd);box-shadow:0 0 0 3px rgba(240,180,90,.1)}
+
+  .drop{border:1.5px dashed var(--line);border-radius:13px;padding:20px;text-align:center;color:var(--muted);
+    font-size:12.5px;position:relative;transition:.15s}
+  .drop:hover{border-color:var(--accentd);color:var(--text)}
+  .drop.has{border-style:solid;border-color:var(--accent);padding:0;overflow:hidden}
+  .drop img{display:block;width:100%;max-height:180px;object-fit:cover}
+  .drop .x{position:absolute;top:7px;right:7px;background:rgba(0,0,0,.65);color:#fff;width:26px;height:26px;border-radius:8px}
+
+  .row{display:flex;gap:7px;flex-wrap:wrap}
+  .chip{flex:1;min-width:60px;border:1px solid var(--line);background:var(--bg2);color:var(--text);
+    padding:9px 8px;border-radius:10px;font-size:12.5px;display:flex;flex-direction:column;align-items:center;gap:2px;transition:.15s}
+  .chip:hover{border-color:var(--accentd)}
+  .chip small{font-size:9px;color:var(--muted);font-weight:500}
+  .chip.on{border-color:var(--accent);background:linear-gradient(150deg,rgba(255,214,148,.18),rgba(240,180,90,.14));
+    color:var(--accent2);font-weight:650}
+  .chip.on small{color:var(--accent)}
+
+  input[type=range]{width:100%;accent-color:var(--accent);height:22px}
+  .seed{display:flex;gap:8px}
+  .seed input{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);font-size:13px}
+  .seed input:focus{outline:0;border-color:var(--accentd)}
+  .seed button{border:1px solid var(--line);background:var(--bg2);border-radius:10px;padding:0 13px;transition:.15s}
+  .seed button:hover{border-color:var(--accent)}
+
+  .adv{border:1px solid var(--line-soft);border-radius:13px;background:var(--bg2);overflow:hidden}
+  .adv>summary{list-style:none;cursor:pointer;padding:12px 14px;font-size:12.5px;color:var(--muted);
+    display:flex;align-items:center;gap:8px;font-weight:600;user-select:none}
+  .adv>summary::-webkit-details-marker{display:none}
+  .adv>summary .ar{margin-left:auto;transition:.2s;color:var(--muted2)}
+  .adv[open]>summary .ar{transform:rotate(90deg)}
+  .adv[open]>summary{border-bottom:1px solid var(--line-soft)}
+  .adv .body{padding:14px;display:flex;flex-direction:column;gap:15px}
+
+  .eta{font-size:12px;color:var(--muted);background:var(--bg2);border:1px solid var(--line-soft);
+    border-radius:11px;padding:10px 12px;line-height:1.5}
+  .eta b{color:var(--accent);font-weight:650}
+  .err{background:rgba(240,112,111,.1);border:1px solid var(--danger);color:#ffb3b2;padding:10px 12px;border-radius:11px;font-size:12.5px}
+
+  .gowrap{position:relative}
+  .go{width:100%;border-radius:13px;padding:15px;font-size:15.5px;font-weight:750;color:#231a08;
+    background:linear-gradient(150deg,var(--accent2),var(--accent));box-shadow:0 14px 34px -12px rgba(240,180,90,.6);
+    transition:.15s;display:flex;align-items:center;justify-content:center;gap:9px}
+  .go:hover{filter:brightness(1.05)} .go:active{transform:translateY(1px)}
+  .qbadge{position:absolute;top:-9px;right:-6px;background:var(--panel3);border:1px solid var(--accent);color:var(--accent);
+    font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;display:none;align-items:center;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+  .hint{font-size:11px;color:var(--muted2);line-height:1.55}
+
+  .extban{background:linear-gradient(150deg,rgba(240,180,90,.14),rgba(240,180,90,.06));border:1px solid var(--accentd);
+    border-radius:12px;padding:10px 12px;font-size:12.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .extban b{color:var(--accent2)} .extban .x{margin-left:auto;color:var(--danger);font-weight:600}
+
+  .reflist{display:flex;flex-direction:column;gap:6px;margin-top:9px}
+  .refitem{display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:12px}
+  .refitem img{width:36px;height:36px;object-fit:cover;border-radius:7px}
+  .refitem .rx{margin-left:auto;color:var(--danger)}
+
+  /* toast */
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:var(--panel3);border:1px solid var(--accent);color:var(--text);padding:11px 18px;border-radius:12px;
+    font-size:13px;z-index:40;transition:.3s;box-shadow:0 14px 40px rgba(0,0,0,.6);pointer-events:none}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ── library ── */
+  .lib{position:fixed;inset:0;z-index:20;background:rgba(5,6,8,.94);backdrop-filter:blur(8px);overflow:auto;padding:22px;display:none}
+  .lib.on{display:block}
+  .lib-head{max-width:1240px;margin:0 auto 18px;display:flex;align-items:center;gap:12px}
+  .lib-head h2{margin:0;font-size:17px} .lib-head .sp{flex:1} .lib-head .meta{font-size:12px;color:var(--muted)}
+  .grid{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(252px,1fr));gap:15px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:15px;overflow:hidden;display:flex;flex-direction:column;transition:.15s}
+  .card:hover{border-color:#33404f}
+  .card video{width:100%;aspect-ratio:16/9;object-fit:contain;background:#000;display:block}
+  .card .b{padding:11px;display:flex;flex-direction:column;gap:8px}
+  .card p{margin:0;font-size:12px;line-height:1.45;max-height:52px;overflow:hidden;color:#cfd6df}
+  .card .m{font-size:10px;color:var(--muted);display:flex;flex-wrap:wrap;gap:7px}
+  .card .m b{color:var(--accent);font-weight:600}
+  .card .acts{display:flex;gap:6px}
+  .card .acts a,.card .acts button{flex:1;text-align:center;border:1px solid var(--line);background:var(--bg2);color:var(--text);
+    border-radius:9px;padding:7px;font-size:11px;transition:.15s}
+  .card .acts a:hover,.card .acts button:hover{border-color:var(--accent)}
+  .card .acts .del{color:var(--danger)} .card .acts .del:hover{border-color:var(--danger)}
+  .lib-empty{max-width:600px;margin:70px auto;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">H3</div>
+  <div><h1>MINIMAX H3 STUDIO</h1><small>GENERADOR DE VIDEO CON AUDIO</small></div>
+  <div class="sp"></div>
+  <button class="hbtn" id="opennew" onclick="location.href='/new'" style="border-color:var(--accent);color:var(--accent)">✨ Nueva interfaz</button>
+  <button class="hbtn" id="openlib">📚 Biblioteca</button>
+</header>
+
+<div class="wrap">
+  <div class="stagewrap">
+    <section class="stage" id="stage">
+      <div class="empty" id="empty">
+        <div class="mk">🎬</div>
+        <h2>Tu video aparecerá aquí</h2>
+        <p>Describe una escena — o sube una imagen — elige el formato y la duración, y pulsa <b>Generar</b>. El audio se crea junto al video.</p>
+      </div>
+      <video id="player" style="display:none" controls playsinline></video>
+      <div class="prog" id="prog" style="display:none">
+        <div class="ring" id="ring" style="--p:0"><div id="ringtxt">0%</div></div>
+        <div class="st" id="progtxt">Generando…</div>
+        <div class="rem" id="progeta"></div>
+        <div class="sub" id="progsub"></div>
+        <div class="btns">
+          <button id="pausebtn" class="pbtn">⏸ Pausar</button>
+          <button id="cancelbtn" class="pbtn danger">✕ Cancelar</button>
+        </div>
+      </div>
+    </section>
+    <div class="resultbar" id="resultbar" style="display:none">
+      <span class="tag" id="resulttag">✓ LISTO</span>
+      <button id="upfastbtn" title="VSR real con atención dispersa — rápido">⚡ VSR Rápido</button>
+      <button id="upfvbtn" title="VSR completo — mejor calidad, más lento">✨ VSR Calidad</button>
+      <button id="rife2btn" title="RIFE → 48 fps · movimiento fluido">🌊 48fps</button>
+      <button id="rife3btn" title="RIFE → 72 fps · muy fluido / cámara lenta">🌊 72fps</button>
+      <button id="extbtn">⇢ Extender</button>
+      <a id="dl" download>⬇ Descargar</a>
+      <button id="newgen">＋ Nuevo</button>
+    </div>
+  </div>
+
+  <aside class="panel">
+    <div class="seg">
+      <button class="on" data-mode="t2v" id="tab-t2v">✍️ Texto</button>
+      <button data-mode="i2v" id="tab-i2v">🖼 Imagen</button>
+      <button data-mode="ref" id="tab-ref">🎞 Referencia</button>
+    </div>
+
+    <div class="extban" id="extbanner" style="display:none">
+      <b>⇢ Extendiendo:</b> <span id="extname"></span> — continúa desde el último frame.
+      <button class="x" id="extcancel">✕ cancelar</button>
+    </div>
+
+    <div id="imgbox" style="display:none">
+      <span class="lbl">Imagen inicial <span class="tip">(primer frame)</span></span>
+      <div class="drop" id="drop"><span>Arrastra o haz clic para subir una imagen</span>
+        <input type="file" id="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer"></div>
+    </div>
+
+    <div id="refbox" style="display:none">
+      <span class="lbl">Referencias <span class="tip">(imágenes · video · audio — el modelo se guía por ellas)</span></span>
+      <div class="row">
+        <button class="chip" id="add-refimg">🖼 + Imagen</button>
+        <button class="chip" id="add-refvid">🎞 + Video</button>
+        <button class="chip" id="add-refaud">🎵 + Audio</button>
+      </div>
+      <input id="fimg" type="file" accept="image/*" multiple hidden>
+      <input id="fvid" type="file" accept="video/*" hidden>
+      <input id="faud" type="file" accept="audio/*" multiple hidden>
+      <div class="reflist" id="reflist"></div>
+    </div>
+
+    <div class="promptbox">
+      <span class="lbl">Prompt <span class="tip">(escena, cámara y audio)</span></span>
+      <textarea id="prompt" placeholder="Plano general al atardecer: un motociclista cruza una carretera desértica hacia las montañas, luz cálida, polvo tras las ruedas. Audio: rugido del motor, viento, música suave.&#10;Sin texto, sin subtítulos, sin marca de agua."></textarea>
+    </div>
+
+    <div>
+      <span class="lbl">Formato</span>
+      <div class="row" id="aspect">
+        <button class="chip on" data-a="16:9">16:9<small>horizontal</small></button>
+        <button class="chip" data-a="9:16">9:16<small>vertical</small></button>
+        <button class="chip" data-a="1:1">1:1<small>cuadrado</small></button>
+      </div>
+    </div>
+
+    <div>
+      <span class="lbl">Calidad / tamaño</span>
+      <div class="row" id="resbox"></div>
+    </div>
+
+    <div>
+      <span class="lbl">Duración: <b style="color:var(--accent)"><output id="durval">4</output> s</b> <span class="tip">· más segundos = bastante más lento</span></span>
+      <input type="range" id="dur" min="2" max="15" step="1" value="4">
+    </div>
+
+    <details class="adv">
+      <summary>⚙️ Ajustes avanzados <span class="ar">▸</span></summary>
+      <div class="body">
+        <div>
+          <span class="lbl">Pasos <span class="tip">(velocidad ⇄ calidad · default 20)</span></span>
+          <div class="row" id="stepsbox">
+            <button class="chip" data-s="5">5<small>ultrarrápido</small></button>
+            <button class="chip" data-s="10">10<small>rápido</small></button>
+            <button class="chip on" data-s="20">20<small>calidad</small></button>
+          </div>
+        </div>
+        <div>
+          <span class="lbl">⚡ Turbo <span class="tip">(acelerador · SageAttention + EasyCache)</span></span>
+          <div class="row" id="turbobox">
+            <button class="chip on" data-t="off">Off<small>calidad máx</small></button>
+            <button class="chip" data-t="sage">Sage<small>~25% +</small></button>
+            <button class="chip" data-t="cache">Sage+Cache<small>~2.4× +</small></button>
+          </div>
+        </div>
+        <div>
+          <span class="lbl">🚀 Menos offload <span class="tip">(mantiene más modelo en VRAM · ayuda en clips cortos · sin perder calidad)</span></span>
+          <div class="row" id="membox">
+            <button class="chip on" data-m="off">Off</button>
+            <button class="chip" data-m="on">On<small>experimental</small></button>
+          </div>
+        </div>
+        <div>
+          <span class="lbl">🔼 Escalar calidad <span class="tip">(VSR real, local · Rápido = atención dispersa · Calidad = completo, más lento)</span></span>
+          <div class="row" id="upscalebox">
+            <button class="chip on" data-u="off">Off</button>
+            <button class="chip" data-u="flashfast_2x">⚡ VSR Rápido</button>
+            <button class="chip" data-u="flashvsr_2x">✨ VSR Calidad</button>
+          </div>
+        </div>
+        <div>
+          <span class="lbl">Seed <span class="tip">(vacío = aleatorio)</span></span>
+          <div class="seed"><input id="seed" type="number" min="0" placeholder="aleatorio"><button id="dice" title="Aleatorio">🎲</button></div>
+        </div>
+      </div>
+    </details>
+
+    <div class="eta" id="eta">Tiempo estimado: calculando…</div>
+    <div class="err" id="err" style="display:none"></div>
+
+    <div class="gowrap">
+      <span class="qbadge" id="qbadge"></span>
+      <button class="go" id="go">Generar video</button>
+    </div>
+    <p class="hint">Corre en tu ComfyUI local (MiniMax H3, INT8) sobre la RTX 3090 (24 GB). Nativo hasta 768 px de lado corto. Si generas mientras hay uno en curso, el siguiente empieza solo al terminar.</p>
+  </aside>
+</div>
+
+<div class="lib" id="lib">
+  <div class="lib-head"><h2>📚 Biblioteca</h2><span class="meta" id="libcount"></span><div class="sp"></div><button class="hbtn" id="closelib">✕ Cerrar</button></div>
+  <div class="grid" id="grid"></div>
+  <div class="lib-empty" id="libempty" style="display:none">Todavía no has creado videos.</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const fmtTime=s=>{s=Math.max(0,Math.round(s||0));const m=Math.floor(s/60);return (m?m+"m ":"")+(s%60)+"s";};
+let toastT=null;
+function toast(m){const t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("on"),2600);}
+
+// resolutions per aspect: [w,h,label]. native max = 768 short edge.
+const RES={
+ "16:9":[[640,352,"360p"],[832,480,"480p"],[1152,640,"HD ★"],[1344,768,"768p"]],
+ "9:16":[[352,640,"360p"],[480,832,"480p"],[640,1152,"HD ★"],[768,1344,"768p"]],
+ "1:1":[[512,512,"512"],[640,640,"640 ★"],[768,768,"768p"]],
+};
+let mode="t2v",aspect="16:9",resIdx=2,resW=1152,resH=640,steps=20,turbo="off",upscale="off",model="int8",memBoost="off",firstImage=null,extending=null;
+const MEM_FACTOR_EST=0.85;  // measured modest drop on short clips
+let refImages=[],refVideo=null,refVideoAudio=true,refAudios=[];
+const TURBO_FACTOR={off:1,sage:0.78,cache:0.42};
+// Estimate model fitted from YOUR real generation times (power law
+// t ≈ fitA·(w·h·frames)^fitP·steps/20). Both coefficient AND exponent are
+// re-fit from the library each load, so big offload-bound jobs stop being
+// under-predicted. Defaults until enough runs exist.
+let fitA=3.1e-11, fitP=1.5;
+
+// ── settings controls ──
+function renderRes(){const box=$("resbox");box.innerHTML="";const list=RES[aspect];
+  if(resIdx>=list.length)resIdx=list.length-1;
+  list.forEach((r,i)=>{const b=document.createElement("button");
+    b.className="chip"+(i===resIdx?" on":"");
+    b.innerHTML=`${r[0]}×${r[1]}<small>${r[2]}</small>`;
+    b.onclick=()=>{resIdx=i;resW=r[0];resH=r[1];renderRes();updateEta();};box.appendChild(b);});
+  resW=list[resIdx][0];resH=list[resIdx][1];}
+$("aspect").onclick=e=>{const b=e.target.closest("[data-a]");if(!b)return;aspect=b.dataset.a;
+  [...$("aspect").children].forEach(x=>x.classList.toggle("on",x.dataset.a===aspect));renderRes();updateEta();};
+$("stepsbox").onclick=e=>{const b=e.target.closest("[data-s]");if(!b)return;steps=+b.dataset.s;
+  [...$("stepsbox").children].forEach(x=>x.classList.toggle("on",+x.dataset.s===steps));updateEta();};
+$("turbobox").onclick=e=>{const b=e.target.closest("[data-t]");if(!b)return;turbo=b.dataset.t;
+  [...$("turbobox").children].forEach(x=>x.classList.toggle("on",x.dataset.t===turbo));updateEta();};
+$("upscalebox").onclick=e=>{const b=e.target.closest("[data-u]");if(!b)return;upscale=b.dataset.u;
+  [...$("upscalebox").children].forEach(x=>x.classList.toggle("on",x.dataset.u===upscale));updateEta();};
+$("membox").onclick=e=>{const b=e.target.closest("[data-m]");if(!b)return;memBoost=b.dataset.m;
+  [...$("membox").children].forEach(x=>x.classList.toggle("on",x.dataset.m===memBoost));updateEta();};
+$("tab-t2v").onclick=()=>setMode("t2v");$("tab-i2v").onclick=()=>setMode("i2v");$("tab-ref").onclick=()=>setMode("ref");
+function setMode(m){mode=m;
+  ["t2v","i2v","ref"].forEach(x=>$("tab-"+x).classList.toggle("on",m===x));
+  $("imgbox").style.display=m==="i2v"?"block":"none";
+  $("refbox").style.display=m==="ref"?"block":"none";}
+function frames(s){let L=Math.max(5,Math.round(s*24));return L+(5-(L%17))%17;}
+function updateEta(){const s=Number($("dur").value);const L=frames(s);
+  // Times vary ~2x for the same settings (cold load, offload, turbo), so a single
+  // number lies — show a range. The accurate figure is the live per-step ETA that
+  // appears once denoising starts.
+  const mem=(memBoost==="on"?MEM_FACTOR_EST:1);
+  let lo=fitA*Math.pow(resW*resH*L,fitP)*(steps/20)*TURBO_FACTOR[turbo]*mem+20;
+  let hi=lo*1.8+60;
+  let up="";
+  if(upscale!=="off"){
+    // upscale cost ∝ OUTPUT pixels × frames (measured ~1.6e-6·outW·outH·L for VSR)
+    const sc=upscale.includes("4x")?4:2;
+    const k=upscale.startsWith("flashfast")?1.3e-6:1.6e-6;
+    const upT=k*(resW*sc)*(resH*sc)*L+30;
+    lo+=upT;hi+=upT*1.4;
+    up=` &nbsp;·&nbsp; <b style="color:var(--accent)">escalado suma ≈ +${fmtTime(upT)}</b>`;
+  }
+  $("eta").innerHTML=`Estimado total: <b>≈ ${fmtTime(lo)}–${fmtTime(hi)}</b>${up} <span class="tip">(el escalado se suma tras generar; el tiempo exacto aparece al empezar)</span>`;}
+$("dur").oninput=e=>{$("durval").textContent=e.target.value;updateEta();};
+$("dice").onclick=()=>$("seed").value=Math.floor(Math.random()*2147483647);
+function showError(m){const e=$("err");e.style.display=m?"block":"none";e.textContent=m;}
+
+// ── reference uploads (Ref2VA) ──
+async function uploadInput(file){
+  const r=await fetch("/api/upload",{method:"POST",body:file,headers:{"X-Filename":file.name,"X-Content-Type":file.type||"application/octet-stream"}});
+  const d=await r.json();if(!r.ok)throw new Error(d.error||"upload falló");return d.name;}
+$("add-refimg").onclick=()=>$("fimg").click();
+$("add-refvid").onclick=()=>$("fvid").click();
+$("add-refaud").onclick=()=>$("faud").click();
+$("fimg").onchange=async e=>{const fs=[...e.target.files];e.target.value="";showError("");
+  for(const f of fs){if(refImages.length>=3){showError("Máximo 3 imágenes de referencia.");break;}
+    try{const n=await uploadInput(f);refImages.push({name:n,url:URL.createObjectURL(f)});}catch(err){showError(err.message);}}renderRefs();};
+$("fvid").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;showError("");
+  try{const n=await uploadInput(f);refVideo={name:n,label:f.name};}catch(err){showError(err.message);}renderRefs();};
+$("faud").onchange=async e=>{const fs=[...e.target.files];e.target.value="";showError("");
+  for(const f of fs){if(refAudios.length>=3){showError("Máximo 3 audios de referencia.");break;}
+    try{const n=await uploadInput(f);refAudios.push({name:n,label:f.name});}catch(err){showError(err.message);}}renderRefs();};
+function renderRefs(){const box=$("reflist");box.innerHTML="";
+  refImages.forEach((r,i)=>{const el=document.createElement("div");el.className="refitem";
+    el.innerHTML=`<img src="${r.url}"><span>🖼 Imagen ${i+1}</span><button class="rx">✕</button>`;
+    el.querySelector(".rx").onclick=()=>{refImages.splice(i,1);renderRefs();};box.appendChild(el);});
+  if(refVideo){const el=document.createElement("div");el.className="refitem";el.style.borderColor="var(--accentd)";
+    el.innerHTML=`<span style="flex:1;min-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🎞 ${refVideo.label} <small style="color:var(--muted)">(v2v)</small></span>
+      <label style="color:var(--muted);display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="rvaud" ${refVideoAudio?"checked":""}>su audio</label>
+      <button class="rx">✕</button>`;
+    el.querySelector("#rvaud").onchange=ev=>refVideoAudio=ev.target.checked;
+    el.querySelector(".rx").onclick=()=>{refVideo=null;renderRefs();};box.appendChild(el);}
+  refAudios.forEach((r,i)=>{const el=document.createElement("div");el.className="refitem";
+    el.innerHTML=`<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🎵 ${r.label}</span><button class="rx">✕</button>`;
+    el.querySelector(".rx").onclick=()=>{refAudios.splice(i,1);renderRefs();};box.appendChild(el);});}
+
+// ── image (i2v) upload ──
+async function onFile(e){const f=e.target.files[0];if(!f)return;showError("");
+  try{const r=await fetch("/api/upload",{method:"POST",body:f,headers:{"X-Filename":f.name,"X-Content-Type":f.type||"image/png"}});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||"upload falló");firstImage=d.name;
+    const drop=$("drop");drop.classList.add("has");
+    drop.innerHTML=`<button class="x" title="Quitar">✕</button><img src="${URL.createObjectURL(f)}">`;
+    drop.querySelector(".x").onclick=ev=>{ev.stopPropagation();resetDrop();};
+  }catch(err){showError(err.message);}}
+function bindFile(){const el=$("file");if(el)el.onchange=onFile;}
+function resetDrop(){firstImage=null;const d=$("drop");d.classList.remove("has");
+  d.innerHTML=`<span>Arrastra o haz clic para subir una imagen</span><input type="file" id="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer">`;bindFile();}
+
+// ── extend / upscale entry points ──
+function startExtend(it){extending={source:it.filename.split("/").pop(),w:it.width,h:it.height};
+  $("lib").classList.remove("on");$("extname").textContent=extending.source;$("extbanner").style.display="flex";
+  $("prompt").value="";$("prompt").placeholder="Describe qué pasa a continuación (o deja vacío para continuación natural)…";
+  showError("");window.scrollTo(0,0);}
+function clearExtend(){extending=null;$("extbanner").style.display="none";
+  $("prompt").placeholder="Plano general al atardecer: un motociclista cruza una carretera desértica… Audio: rugido del motor, viento.";}
+$("extcancel").onclick=clearExtend;
+$("extbtn").onclick=()=>{if(window._lastResult)startExtend(window._lastResult);};
+$("upfastbtn").onclick=()=>{if(window._lastResult)queueUpscale(window._lastResult.filename,"flashfast_2x");};
+$("upfvbtn").onclick=()=>{if(window._lastResult)queueUpscale(window._lastResult.filename,"flashvsr_2x");};
+$("rife2btn").onclick=()=>{if(window._lastResult)queueInterp(window._lastResult.filename,2);};
+$("rife3btn").onclick=()=>{if(window._lastResult)queueInterp(window._lastResult.filename,3);};
+$("newgen").onclick=()=>{$("resultbar").style.display="none";$("player").style.display="none";$("empty").style.display="block";};
+
+// ══════════ job pipeline: single "Generar" button, silent auto-queue ══════════
+let activeJob=null, queue=[], paused=false, pollAbort=false;
+function updateQueueBadge(){const b=$("qbadge");
+  if(queue.length){b.style.display="inline-flex";b.textContent="▸ "+queue.length+" en cola";}
+  else b.style.display="none";}
+function setBar(p,reset){const r=$("ring");
+  if(reset){r.style.setProperty("--p",0);$("ringtxt").textContent="0%";return;}
+  p=Math.min(100,p);if(p>(+r.style.getPropertyValue("--p")||0)){r.style.setProperty("--p",p);$("ringtxt").textContent=Math.round(p)+"%";}}
+function ug(){$("go").textContent=activeJob?"＋ Añadir a la cola":"Generar video";}
+function setBusy(b){$("prog").style.display=b?"grid":"none";
+  if(b){$("empty").style.display="none";$("player").style.display="none";$("resultbar").style.display="none";}}
+
+async function submitJob(spec){
+  if(activeJob){queue.push(spec);updateQueueBadge();toast("➕ Añadido a la cola · empezará al terminar el actual");return;}
+  await startJob(spec);
+}
+async function startJob(spec){
+  activeJob={id:null,info:spec.info,pending:true};  // reclama el turno YA (evita doble envío simultáneo)
+  showError("");pollAbort=false;paused=false;$("pausebtn").textContent="⏸ Pausar";
+  setBusy(true);setBar(0,true);$("progtxt").textContent=spec.startLabel||"Enviando…";
+  $("progeta").textContent="";$("progsub").textContent="";
+  try{const r=await fetch(spec.endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(spec.payload)});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||"No se pudo iniciar.");
+    if(spec.onStart)spec.onStart(d);
+    activeJob={id:d.prompt_id,info:{
+      w:d.width||spec.info.w, h:d.height||spec.info.h,
+      seed:(d.seed!=null?d.seed:(spec.info.seed!=null?spec.info.seed:0)),
+      length:d.length||spec.info.length||0}};
+    ug();poll(activeJob.id,activeJob.info);
+  }catch(err){activeJob=null;setBusy(false);$("empty").style.display="block";showError(err.message);nextJob();}
+}
+function nextJob(){if(queue.length){const s=queue.shift();updateQueueBadge();startJob(s);}}
+function poll(id,info){
+  const tick=async()=>{
+    if(pollAbort)return;
+    try{const r=await fetch("/api/status?id="+encodeURIComponent(id));const d=await r.json();
+      if(d.status==="paused"){
+        $("progtxt").textContent="⏸ Pausado";$("progeta").textContent="En pausa — reanuda cuando quieras";
+      }else{
+        if(typeof d.pct==="number")setBar(d.pct);
+        if(d.stage)$("progtxt").textContent=d.stage;
+        $("progeta").textContent=(d.eta!=null&&d.eta>0)?`faltan ~${fmtTime(d.eta)}`
+          :((typeof d.pct==="number"&&d.pct<42)?"Cargando modelos… (calculando)":"");
+        const el=(d.elapsed!=null?d.elapsed:0);
+        $("progsub").textContent=`${info.w}×${info.h} · ${(info.length/24).toFixed(1)}s · seed ${info.seed} · transcurrido ${fmtTime(el)}`;
+        if(d.status==="done"){onDone(d.name,d.gen_seconds,info);return;}
+        if(d.status==="error"){activeJob=null;setBusy(false);$("empty").style.display="block";showError(d.error||"Falló la generación.");nextJob();return;}
+      }
+    }catch(e){}
+    setTimeout(tick,1000);
+  };tick();
+}
+function onDone(name,gen,info){setBar(100);$("progtxt").textContent="¡Listo!";
+  setTimeout(()=>{
+    activeJob=null;ug();
+    const p=$("player");p.src="/api/video?name="+encodeURIComponent(name);
+    p.style.display="block";$("prog").style.display="none";$("empty").style.display="none";p.load();p.play().catch(()=>{});
+    $("resulttag").textContent=`✓ LISTO · ${info.w}×${info.h} · seed ${info.seed}`+(gen?` · ⏱ ${fmtTime(gen)}`:"");
+    $("dl").href="/api/video?name="+encodeURIComponent(name);$("dl").download=name.split("/").pop();
+    window._lastResult={filename:name,width:info.w,height:info.h};
+    $("resultbar").style.display="flex";loadLibrary();
+    nextJob();   // si hay otro en cola, arranca solo
+  },400);
+}
+
+// ── build a generate spec from current settings ──
+function buildGenerateSpec(){
+  const prompt=$("prompt").value.trim();
+  const hasRef=refImages.length||refVideo||refAudios.length;
+  if(extending){
+    if(!extending.source){showError("No hay video que extender.");return null;}
+    return {endpoint:"/api/extend",startLabel:"Extendiendo…",
+      payload:{source:extending.source,prompt,seconds:Number($("dur").value),steps,turbo,upscale},
+      info:{w:extending.w,h:extending.h},onStart:()=>clearExtend()};
+  }
+  if(mode!=="ref"&&!prompt){showError("Escribe un prompt.");return null;}
+  if(mode==="i2v"&&!firstImage){showError("Sube una imagen inicial o cambia a Texto → Video.");return null;}
+  if(mode==="ref"&&!hasRef){showError("Añade al menos una referencia (imagen, video o audio).");return null;}
+  const sv=$("seed").value.trim();
+  const p={mode,prompt,width:resW,height:resH,seconds:Number($("dur").value),steps,turbo,upscale,model,
+    mem_factor:memBoost==="on"?0.5:null,seed:sv===""?null:Number(sv),first_image:mode==="i2v"?firstImage:null};
+  if(mode==="ref"){p.ref_images=refImages.map(r=>r.name);p.ref_video=refVideo?refVideo.name:null;
+    p.ref_video_audio=refVideoAudio;p.ref_audios=refAudios.map(r=>r.name);}
+  return {endpoint:"/api/generate",startLabel:"Enviando…",payload:p,info:{w:resW,h:resH}};
+}
+let lastGoClick=0;
+$("go").onclick=()=>{const now=Date.now();if(now-lastGoClick<1200)return;lastGoClick=now;const spec=buildGenerateSpec();if(!spec)return;showError("");submitJob(spec);};
+function queueUpscale(name,up){$("lib").classList.remove("on");
+  submitJob({endpoint:"/api/upscale",startLabel:"Escalando — "+(up.startsWith("flashfast")?"VSR Rápido":"VSR Calidad"),
+    payload:{source:name,upscale:up},info:{w:0,h:0,seed:0}});}
+function queueInterp(name,mult){$("lib").classList.remove("on");
+  submitJob({endpoint:"/api/interpolate",startLabel:"Interpolando (RIFE) → "+(24*mult)+" fps",
+    payload:{source:name,multiplier:mult},info:{w:0,h:0,seed:0}});}
+
+// ── cancel / pause ──
+$("cancelbtn").onclick=async()=>{pollAbort=true;
+  try{await fetch("/api/cancel",{method:"POST"});}catch(e){}
+  activeJob=null;paused=false;$("pausebtn").textContent="⏸ Pausar";
+  setBusy(false);$("empty").style.display="block";showError("Generación cancelada.");
+  nextJob();};
+$("pausebtn").onclick=async()=>{
+  if(!paused){try{const r=await fetch("/api/pause",{method:"POST"});const d=await r.json();
+      if(!r.ok||!d.ok){showError(d.error||"No pude pausar.");return;}
+      paused=true;$("pausebtn").textContent="▶ Reanudar";$("progtxt").textContent="⏸ Pausado";
+    }catch(e){showError("No pude pausar.");}
+  }else{try{await fetch("/api/resume",{method:"POST"});}catch(e){}
+    paused=false;$("pausebtn").textContent="⏸ Pausar";$("progtxt").textContent="Reanudando…";}
+};
+
+// ── library ──
+$("openlib").onclick=()=>{$("lib").classList.add("on");loadLibrary();};
+$("closelib").onclick=()=>$("lib").classList.remove("on");
+document.addEventListener("keydown",e=>{if(e.key==="Escape")$("lib").classList.remove("on");});
+async function loadLibrary(){
+  try{const r=await fetch("/api/library");const items=(await r.json()).items||[];
+    // Re-fit the estimate (log-log least squares) from real runs: find both the
+    // exponent fitP and coefficient fitA so large jobs aren't under-predicted.
+    const pts=items.filter(i=>i.gen_seconds>3&&i.length&&i.width&&i.height&&i.mode!=="timeline")
+      .map(i=>[Math.log(i.width*i.height*i.length),Math.log(Math.max(3,i.gen_seconds-20))]);
+    if(pts.length>=4){let n=pts.length,sx=0,sy=0,sxx=0,sxy=0;
+      for(const[x,y]of pts){sx+=x;sy+=y;sxx+=x*x;sxy+=x*y;}
+      const den=n*sxx-sx*sx;
+      if(den>1e-9){const p=(n*sxy-sx*sy)/den;fitP=Math.min(2.4,Math.max(1.0,p));
+        const as=pts.map(([lx,ly])=>Math.exp(ly)/Math.pow(Math.exp(lx),fitP)).sort((a,b)=>a-b);
+        fitA=as[Math.floor(as.length/2)];updateEta();}}
+    $("libcount").textContent=items.length+" videos";
+    const grid=$("grid");grid.innerHTML="";$("libempty").style.display=items.length?"none":"block";
+    for(const it of items){const url="/api/video?name="+encodeURIComponent(it.filename);
+      const el=document.createElement("div");el.className="card";
+      el.innerHTML=`<video src="${url}" preload="metadata" controls playsinline></video>
+        <div class="b"><p>${(it.prompt||"").slice(0,160)}</p>
+        <div class="m"><span>${it.width}×${it.height}</span><span>${(it.length/24).toFixed(1)}s</span>
+        <span>seed ${it.seed}</span><b>⏱ ${fmtTime(it.gen_seconds)}</b></div>
+        <div class="acts"><button class="upfast" title="VSR rápido (atención dispersa)">⚡VSR</button><button class="upfv" title="VSR calidad (más lento)">✨VSR</button><button class="ext">⇢ Extender</button></div>
+        <div class="acts"><button class="rife2" title="RIFE → 48 fps (fluido)">🌊 48fps</button><button class="rife3" title="RIFE → 72 fps (muy fluido)">🌊 72fps</button></div>
+        <div class="acts"><button class="cp">📋 Copiar</button><a href="${url}" download="${it.filename.split('/').pop()}">⬇ Descargar</a>
+        <button class="del">🗑</button></div></div>`;
+      el.querySelector(".cp").onclick=()=>{navigator.clipboard.writeText(it.prompt||"").then(()=>{
+        const b=el.querySelector(".cp"),t=b.textContent;b.textContent="✓ Copiado";setTimeout(()=>b.textContent=t,1200);}).catch(()=>showError("El navegador bloqueó el portapapeles."));};
+      el.querySelector(".upfast").onclick=()=>queueUpscale(it.filename,"flashfast_2x");
+      el.querySelector(".upfv").onclick=()=>queueUpscale(it.filename,"flashvsr_2x");
+      el.querySelector(".rife2").onclick=()=>queueInterp(it.filename,2);
+      el.querySelector(".rife3").onclick=()=>queueInterp(it.filename,3);
+      el.querySelector(".ext").onclick=()=>startExtend(it);
+      el.querySelector(".del").onclick=async()=>{if(!confirm("¿Eliminar este video?"))return;
+        await fetch("/api/library?id="+it.id,{method:"DELETE"});loadLibrary();};
+      grid.appendChild(el);}
+  }catch(e){}
+}
+
+// ── reconnect to an in-flight generation after a page refresh ──
+fetch("/api/active").then(r=>r.json()).then(d=>{if(d&&d.active){
+  activeJob={id:d.id,info:{w:d.w,h:d.h,seed:d.seed,length:d.length}};
+  pollAbort=false;paused=false;$("pausebtn").textContent="⏸ Pausar";
+  setBusy(true);$("progtxt").textContent=d.stage||"Generando…";setBar(d.pct||0);
+  ug();poll(d.id,activeJob.info);}}).catch(()=>{});
+
+// init
+bindFile();renderRes();updateEta();loadLibrary();
+</script>
+</body>
+</html>

@@ -1,0 +1,1875 @@
+<!doctype html>
+<html lang="es" class="h-full bg-black">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>MiniMax H3 Studio</title>
+    <link rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E">
+    <!-- Tailwind CSS (local, sin depender de internet) -->
+    <script src="/tailwind.js"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            color-scheme: dark;
+        }
+
+        /* Animaciones suaves */
+        .menu-popover {
+            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes pulseSlow {
+
+            0%,
+            100% {
+                opacity: 0.7;
+                transform: scale(1) translateX(-50%);
+            }
+
+            50% {
+                opacity: 1;
+                transform: scale(1.04) translateX(-50%);
+            }
+        }
+
+        .ambient-glow {
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, rgba(37, 99, 235, 0.22) 40%, rgba(147, 51, 234, 0.12) 60%, rgba(0, 0, 0, 0) 80%);
+            filter: blur(48px);
+            animation: pulseSlow 5s ease-in-out infinite;
+        }
+
+        /* Personalización de scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #000;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+
+        /* Chips selector de opciones estilizados y ultra compactos */
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .chip {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(15, 17, 23, 0.85);
+            color: #94a3b8;
+            padding: 5px 10px;
+            border-radius: 10px;
+            font-size: 11.5px;
+            font-weight: 600;
+            display: inline-flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            transition: all 0.18s ease;
+            cursor: pointer;
+            line-height: 1.2;
+        }
+
+        .chip:hover {
+            border-color: #3b82f6;
+            color: #ffffff;
+            background: #111827;
+        }
+
+        .chip small {
+            font-size: 10px;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        .chip.on {
+            border-color: #3b82f6;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(37, 99, 235, 0.2));
+            color: #ffffff;
+            font-weight: 700;
+            box-shadow: 0 2px 10px rgba(59, 130, 246, 0.25);
+        }
+
+        .chip.on small {
+            color: #93c5fd;
+        }
+
+        /* Segmented tabs con efecto glassmorphic */
+        .seg button {
+            transition: all 0.2s ease;
+        }
+
+        .seg button.on {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            color: #ffffff;
+            font-weight: 700;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+        }
+
+        /* Dropzone */
+        .drop {
+            border: 1.5px dashed #1e293b;
+            border-radius: 14px;
+            padding: 16px;
+            text-align: center;
+            color: #64748b;
+            font-size: 12px;
+            position: relative;
+            transition: all 0.2s;
+            background: rgba(10, 12, 18, 0.8);
+        }
+
+        .drop:hover {
+            border-color: #3b82f6;
+            color: #e2e8f0;
+            background: rgba(15, 23, 42, 0.9);
+        }
+
+        .drop.has {
+            border-style: solid;
+            border-color: #3b82f6;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .drop img {
+            display: block;
+            width: 100%;
+            max-height: 180px;
+            object-fit: cover;
+        }
+
+        .drop .x {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            font-weight: bold;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .drop .x:hover {
+            background: #ef4444;
+        }
+    </style>
+</head>
+
+<body
+    class="h-full bg-black text-white antialiased flex flex-col justify-between overflow-x-hidden selection:bg-blue-600 selection:text-white">
+
+    <!-- Encabezado Superior Flotante y Transparente -->
+    <header class="w-full py-4 px-6 md:px-12 flex justify-between items-center z-20 shrink-0">
+        <div class="flex items-center gap-3">
+            <div
+                class="w-10 h-10 rounded-2xl bg-gradient-to-br from-neutral-900 to-neutral-950 border border-neutral-800 flex items-center justify-center font-black text-sm tracking-wider text-white shadow-xl">
+                H3
+            </div>
+            <div>
+                <h1 class="text-base font-bold tracking-wider text-white">LOCAL AI STUDIO</h1>
+                <p class="text-[10px] tracking-widest text-neutral-400 font-semibold">MINIMAX H3 · VIDEO CON AUDIO</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+            <!-- Selector de Proyecto -->
+            <div class="relative">
+                <button id="projBtn"
+                    class="flex items-center gap-2 text-xs font-semibold text-neutral-100 hover:text-white bg-neutral-900/90 border border-blue-800/50 hover:border-blue-600 px-4 py-2.5 rounded-full transition-all shadow-xl active:scale-95">
+                    <span>🗂</span><span id="projName" class="max-w-[130px] truncate">General</span>
+                    <svg class="w-3 h-3 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+                <div id="projMenu"
+                    class="menu-popover absolute top-full right-0 mt-2 bg-neutral-900/97 border border-neutral-800 rounded-2xl p-2 shadow-2xl opacity-0 scale-95 pointer-events-none flex flex-col gap-1 min-w-[230px] z-50 backdrop-blur-xl">
+                    <div class="text-[10px] text-neutral-500 font-semibold px-2 pt-1 pb-0.5 tracking-wide">PROYECTOS</div>
+                    <div id="projList" class="flex flex-col gap-0.5 max-h-[260px] overflow-y-auto"></div>
+                    <div class="h-px bg-neutral-800 my-1"></div>
+                    <button id="projNew"
+                        class="flex items-center gap-2 w-full px-3 py-2 text-xs font-semibold text-blue-300 hover:bg-neutral-800 rounded-xl transition-colors">＋
+                        Crear proyecto</button>
+                </div>
+            </div>
+            <!-- Volver a la interfaz clásica -->
+            <a href="/"
+                class="flex items-center gap-2 text-xs font-semibold text-neutral-300 hover:text-white bg-neutral-900/90 border border-neutral-800 hover:border-neutral-700 px-5 py-2.5 rounded-full transition-all duration-200 shadow-xl active:scale-95">
+                <span>◀ Clásica</span>
+            </a>
+            <!-- Botón Biblioteca -->
+            <button id="openlib"
+                class="flex items-center gap-2 text-xs font-semibold text-neutral-200 hover:text-white bg-neutral-900/90 border border-neutral-800 hover:border-neutral-700 px-5 py-2.5 rounded-full transition-all duration-200 shadow-xl active:scale-95">
+                <span class="text-sm">📚</span>
+                <span>Biblioteca</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Banner de Extensión (cuando se está extendiendo un video) -->
+    <div id="extbanner"
+        class="max-w-2xl mx-auto w-[92%] bg-neutral-900/95 border border-blue-500/50 rounded-2xl px-5 py-3 text-xs text-neutral-200 flex items-center justify-between shadow-2xl backdrop-blur-xl z-20"
+        style="display:none">
+        <div class="flex items-center gap-2.5">
+            <span class="text-blue-400 font-bold">⇢ Extendiendo:</span>
+            <span id="extname" class="font-medium text-white max-w-[260px] truncate"></span>
+        </div>
+        <button id="extcancel"
+            class="text-red-400 hover:text-red-300 font-medium px-3 py-1 bg-red-950/50 rounded-xl border border-red-800/50 transition-colors">✕
+            cancelar</button>
+    </div>
+
+    <!-- Contenido Principal: Reproductor Espacial Flotante de Gran Tamaño -->
+    <main class="flex-1 flex flex-col justify-center items-center px-4 md:px-8 py-2 relative z-10 w-full">
+
+        <!-- Contenedor Principal del Reproductor Gigante en el Aire -->
+        <div class="relative w-full max-w-6xl md:max-w-7xl flex flex-col items-center">
+
+            <section id="stage"
+                class="relative w-full aspect-video min-h-[420px] md:min-h-[560px] max-h-[72vh] rounded-3xl bg-neutral-950 border border-neutral-800/90 shadow-[0_40px_120px_rgba(0,0,0,0.98)] overflow-hidden transition-all duration-300 group flex items-center justify-center">
+
+                <!-- Estado Inicial Vacío / Placeholder de Reproducción Grande -->
+                <div id="empty"
+                    class="w-full h-full flex flex-col items-center justify-center p-8 md:p-12 text-center bg-gradient-to-b from-neutral-950 via-black to-neutral-950 cursor-pointer">
+                    <div class="text-5xl md:text-6xl mb-4 group-hover:scale-110 transition-transform duration-300">
+                        🎬
+                    </div>
+                    <h2 class="text-xl md:text-2xl font-bold text-white tracking-wide mb-2">Tu video aparecerá aquí</h2>
+                    <p class="text-xs md:text-sm text-neutral-400 max-w-xl leading-relaxed font-normal">
+                        Describe una escena — o sube una imagen — elige el formato y la duración, y pulsa Generar. El
+                        audio se crea junto al video.
+                    </p>
+                </div>
+
+                <!-- Reproductor de Video HD Pantalla Completa del Stage -->
+                <video id="player" class="w-full h-full object-contain bg-black hidden" controls playsinline></video>
+
+                <!-- Overlay de Progreso de Generación -->
+                <div id="prog"
+                    class="absolute inset-0 bg-black/92 backdrop-blur-lg flex flex-col items-center justify-center gap-5 p-8 text-center z-30"
+                    style="display:none">
+                    <div id="ring"
+                        class="relative w-32 h-32 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(59,130,246,0.4)]">
+                        <div class="absolute inset-0 rounded-full border-4 border-neutral-800 border-t-blue-500 animate-spin"></div>
+                        <div id="ringtxt" class="relative z-10 text-2xl font-extrabold text-white tracking-tight">0%</div>
+                    </div>
+                    <div>
+                        <div id="progtxt" class="text-base font-bold text-white tracking-wide">Generando…</div>
+                        <div id="progeta" class="text-xs text-blue-400 font-semibold mt-1.5 min-h-[20px]"></div>
+                        <div id="progsub" class="text-xs text-neutral-400 mt-1"></div>
+                    </div>
+                    <div class="flex items-center gap-3.5 mt-2">
+                        <button id="pausebtn"
+                            class="px-5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-semibold text-neutral-200 hover:text-white hover:border-neutral-700 transition-all shadow-lg">⏸
+                            Pausar</button>
+                        <button id="cancelbtn"
+                            class="px-5 py-2.5 rounded-xl bg-red-950/50 border border-red-900/70 text-xs font-semibold text-red-300 hover:text-red-100 hover:bg-red-900/70 transition-all shadow-lg">✕
+                            Cancelar</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Barra de Acciones de Resultado (después de generar) -->
+            <div id="resultbar"
+                class="w-full mt-4 bg-neutral-900/95 border border-neutral-800 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-2xl backdrop-blur-xl"
+                style="display:none">
+                <div class="flex items-center gap-2">
+                    <span id="resulttag"
+                        class="text-xs font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-800/70 px-3.5 py-1.5 rounded-xl">✓
+                        LISTO</span>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button id="upfastbtn" title="VSR real rápido"
+                        class="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-200 transition-all">⚡
+                        VSR Rápido</button>
+                    <button id="upfvbtn" title="VSR calidad"
+                        class="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-200 transition-all">✨
+                        VSR Calidad</button>
+                    <button id="rife2btn" title="RIFE 48fps"
+                        class="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-200 transition-all">🌊
+                        48fps</button>
+                    <button id="rife3btn" title="RIFE 72fps"
+                        class="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-200 transition-all">🌊
+                        72fps</button>
+                    <button id="extbtn"
+                        class="px-3.5 py-1.5 rounded-xl bg-blue-600/40 hover:bg-blue-600/60 border border-blue-500/60 text-xs font-semibold text-blue-200 transition-all">⇢
+                        Extender</button>
+                    <a id="dl" download
+                        class="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-white transition-all flex items-center gap-1.5">⬇
+                        Descargar</a>
+                    <button id="newgen"
+                        class="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-300 transition-all">＋
+                        Nuevo</button>
+                </div>
+            </div>
+
+            <!-- Luz azul ambiental únicamente abajo (proyectada hacia el cuadro inferior de creación de video) -->
+            <div
+                class="ambient-glow absolute -bottom-14 left-1/2 -translate-x-1/2 w-11/12 h-44 rounded-[100%] pointer-events-none z-0 transition-all duration-700">
+            </div>
+        </div>
+    </main>
+
+    <!-- Vista de Biblioteca a Pantalla Completa Espacial -->
+    <div id="lib"
+        class="fixed inset-0 bg-black z-50 flex flex-col opacity-0 pointer-events-none transition-all duration-300 overflow-hidden">
+
+        <!-- Encabezado de la Biblioteca -->
+        <header
+            class="w-full py-5 px-6 md:px-12 border-b border-neutral-900/80 flex justify-between items-center bg-black/90 backdrop-blur-md shrink-0 z-10">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-10 h-10 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white text-lg">
+                    📚
+                </div>
+                <div>
+                    <h2 class="text-lg font-bold text-white tracking-wide">Biblioteca de Videos</h2>
+                    <p id="libcount" class="text-xs text-neutral-400">Colección completa</p>
+                </div>
+            </div>
+
+            <!-- Botón Volver al Reproductor -->
+            <button id="closelib"
+                class="flex items-center gap-2 text-xs font-medium text-neutral-300 hover:text-white bg-neutral-900 border border-neutral-800 hover:border-neutral-700 px-5 py-2.5 rounded-full transition-all duration-200 shadow-lg active:scale-95">
+                <svg class="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                <span>Volver al Reproductor</span>
+            </button>
+        </header>
+
+        <!-- Contenido Espacial a Pantalla Completa de la Biblioteca -->
+        <main class="flex-1 w-full p-6 md:p-12 overflow-y-auto flex flex-col justify-start">
+
+            <div id="libempty" class="text-center text-neutral-500 my-24 text-sm" style="display:none">Todavía no has
+                creado videos.</div>
+
+            <!-- Grilla Espacial Completa de Videos -->
+            <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-8 w-full">
+            </div>
+        </main>
+    </div>
+
+    <!-- Espacio Creativo (editor pro estilo Flow) -->
+    <div id="creative"
+        class="fixed inset-0 z-30 flex flex-col opacity-0 pointer-events-none transition-all duration-300 pb-[100px]"
+        style="background:#08090b">
+        <!-- Barra superior -->
+        <header class="flex items-center gap-3 px-5 py-3 shrink-0">
+            <button id="creativeClose" title="Volver" class="w-9 h-9 rounded-full hover:bg-white/10 grid place-items-center text-neutral-300 transition-colors shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <div id="creativeTitle" class="text-sm font-medium text-neutral-100 truncate max-w-[170px] shrink-0">Espacio creativo</div>
+            <div id="creativeHistory" class="flex-1 flex items-center justify-center gap-1.5 overflow-x-auto px-2"></div>
+            <div class="flex items-center gap-1 shrink-0">
+                <button id="creativeDl" title="Descargar el clip actual" class="w-9 h-9 rounded-full hover:bg-white/10 grid place-items-center text-neutral-300">
+                    <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 11l5 5 5-5M12 16V4" /></svg>
+                </button>
+                <button id="creativeJoin" title="Exportar todos los segmentos unidos" class="ml-1.5 px-4 py-1.5 rounded-full bg-white text-black text-sm font-semibold hover:bg-neutral-200 transition-colors">Exportar</button>
+            </div>
+        </header>
+        <!-- Reproductor -->
+        <main class="flex-1 min-h-0 flex flex-col items-center justify-center px-6 gap-3 relative">
+            <div class="relative w-full max-w-5xl aspect-video rounded-xl overflow-hidden bg-black shadow-2xl">
+                <video id="creativePlayer" preload="auto" class="w-full h-full object-contain bg-black" playsinline></video>
+                <div id="creativeProg" class="absolute inset-0 bg-black/85 backdrop-blur flex flex-col items-center justify-center gap-4" style="display:none">
+                    <div class="relative w-20 h-20 rounded-full grid place-items-center">
+                        <div class="absolute inset-0 rounded-full border-[3px] border-white/10 border-t-white animate-spin"></div>
+                        <div id="creativeRingtxt" class="relative z-10 text-lg font-bold text-white">0%</div>
+                    </div>
+                    <div id="creativeProgtxt" class="text-sm font-medium text-white">Generando…</div>
+                    <div id="creativeProgeta" class="text-xs text-neutral-400 min-h-[16px]"></div>
+                    <button id="creativeCancel" class="mt-1 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-neutral-200">Cancelar</button>
+                </div>
+            </div>
+            <!-- Controles de video -->
+            <div class="flex items-center gap-4 text-neutral-300">
+                <button id="cMute" class="hover:text-white transition-colors" title="Silenciar"><svg id="cMuteIcon" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M3 10v4h4l5 5V5L7 10H3z" /></svg></button>
+                <span id="cCur" class="text-[11px] tabular-nums text-neutral-400 w-11 text-right">00:00</span>
+                <button id="cPrev" class="hover:text-white transition-colors" title="Segmento anterior"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zM20 6l-9 6 9 6z" /></svg></button>
+                <button id="cPlay" class="w-10 h-10 rounded-full bg-white text-black grid place-items-center hover:bg-neutral-200 transition-colors" title="Reproducir / Pausar"><svg id="cPlayIcon" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg></button>
+                <button id="cNext" class="hover:text-white transition-colors" title="Segmento siguiente"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM4 6l9 6-9 6z" /></svg></button>
+                <span id="cTot" class="text-[11px] tabular-nums text-neutral-400 w-11">00:00</span>
+                <button id="cFull" class="hover:text-white transition-colors" title="Pantalla completa"><svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" /></svg></button>
+            </div>
+        </main>
+        <!-- Línea de tiempo -->
+        <div class="shrink-0 px-5 pt-1 pb-2">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] text-neutral-500" id="creativeMeta">1 clip</span>
+                <div class="flex items-center gap-3 text-neutral-500">
+                    <button id="cZoomOut" class="hover:text-white transition-colors" title="Alejar"><svg class="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M21 21l-4.3-4.3M11 18a7 7 0 100-14 7 7 0 000 14zM8 11h6" /></svg></button>
+                    <button id="cZoomIn" class="hover:text-white transition-colors" title="Acercar"><svg class="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M21 21l-4.3-4.3M11 18a7 7 0 100-14 7 7 0 000 14zM11 8v6M8 11h6" /></svg></button>
+                </div>
+            </div>
+            <div class="flex items-end gap-2">
+                <div class="flex-1 min-w-0 relative">
+                    <div id="cRuler" class="relative h-3.5 mb-1 select-none text-[9px] text-neutral-600"></div>
+                    <div id="creativeTrack" class="flex items-stretch rounded-md overflow-hidden ring-1 ring-white/20 h-14"></div>
+                    <div id="cPlayhead" class="absolute top-0 bottom-0 w-[2px] bg-white pointer-events-none rounded shadow-[0_0_6px_rgba(255,255,255,.6)]" style="left:0;display:none"></div>
+                </div>
+                <button id="creativeAddBtn" title="Nuevo segmento" class="w-9 h-14 shrink-0 rounded-md border border-white/15 hover:border-white/50 hover:bg-white/5 grid place-items-center text-neutral-300 text-lg leading-none transition-colors">＋</button>
+                <button id="creativeExtendBtn" title="Extender el último clip" class="w-9 h-14 shrink-0 rounded-md border border-blue-500/40 hover:border-blue-400 hover:bg-blue-500/10 grid place-items-center text-blue-300 transition-colors">⇢</button>
+            </div>
+            <div id="creativeErr" class="text-red-300 text-xs mt-1" style="display:none"></div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast"
+        class="fixed left-1/2 bottom-28 -translate-x-1/2 bg-neutral-900/95 border border-blue-500/60 text-white px-6 py-3 rounded-2xl text-xs font-semibold opacity-0 pointer-events-none transition-all duration-300 shadow-2xl z-[60]">
+    </div>
+
+    <!-- Píldora fija: video generándose de fondo (mientras ves el que ya terminó) -->
+    <div id="genpill" style="display:none"
+        class="fixed left-4 bottom-28 bg-neutral-900/95 border border-emerald-500/50 text-emerald-100 px-4 py-2.5 rounded-2xl text-[11px] font-semibold shadow-2xl z-[55] flex items-center gap-2">
+        <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="genpilltxt">⏳ Generando video…</span>
+    </div>
+
+    <!-- Cuadro de Chat / Creador de Video Inferior Flotante sobre la pantalla -->
+    <footer class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[94%] max-w-4xl z-40 shrink-0 flex flex-col gap-2">
+
+        <!-- Menú desplegable de Preferencias y Parámetros Estilizado Compacto y Organizado -->
+        <div id="settingsPanel"
+            class="bg-neutral-950/95 border border-neutral-800/90 rounded-3xl p-4 md:p-5 shadow-[0_30px_70px_rgba(0,0,0,0.95)] backdrop-blur-2xl transition-all duration-300 hidden flex-col gap-3 text-xs max-h-[70vh] overflow-y-auto">
+
+            <!-- Encabezado / Selector de Modos -->
+            <div class="flex items-center justify-between pb-2 border-b border-neutral-800/80">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]"></span>
+                    <span class="text-xs font-bold text-white tracking-wide">Preferencias de Generación</span>
+                </div>
+                <div class="seg flex items-center gap-1 bg-neutral-900/90 p-1 rounded-xl border border-neutral-800">
+                    <button id="tab-t2v" class="on px-3 py-1 rounded-lg text-[11px] font-semibold transition-all"
+                        data-mode="t2v">✍️ Texto</button>
+                    <button id="tab-i2v"
+                        class="px-3 py-1 rounded-lg text-[11px] font-semibold text-neutral-400 transition-all"
+                        data-mode="i2v">🖼 Imagen</button>
+                    <button id="tab-ref"
+                        class="px-3 py-1 rounded-lg text-[11px] font-semibold text-neutral-400 transition-all"
+                        data-mode="ref">🎞 Referencia</button>
+                </div>
+                <button id="closeSettingsBtn"
+                    class="text-neutral-500 hover:text-white p-1 rounded-lg hover:bg-neutral-900 transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Caja de Imagen Inicial (i2v) -->
+            <div id="imgbox" class="space-y-1.5" style="display:none">
+                <span class="text-neutral-200 font-semibold flex items-center gap-1.5 text-[11px]">
+                    <span>Imagen inicial</span> <span class="text-neutral-500 font-normal">(primer frame)</span>
+                </span>
+                <div id="drop" class="drop py-3 text-xs">
+                    <span>Arrastra o haz clic para subir una imagen inicial</span>
+                    <input type="file" id="file" accept="image/*"
+                        style="position:absolute;inset:0;opacity:0;cursor:pointer">
+                </div>
+            </div>
+
+            <!-- Sección de Referencias -->
+            <div id="refbox" class="flex-col gap-2 bg-neutral-900/70 p-3 rounded-xl border border-neutral-800/80"
+                style="display:none">
+                <span class="text-neutral-200 font-semibold flex items-center gap-1.5 text-[11px]">
+                    <span>Referencias</span> <span class="text-neutral-400 font-normal">(imágenes · video · audio — el
+                        modelo se guía por ellas)</span>
+                </span>
+                <div class="flex flex-wrap gap-2">
+                    <button id="add-refimg"
+                        class="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-3 py-1 rounded-lg border border-neutral-700/80 font-medium text-[11px]">🖼
+                        + Imagen</button>
+                    <button id="add-refvid"
+                        class="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-3 py-1 rounded-lg border border-neutral-700/80 font-medium text-[11px]">🎞
+                        + Video</button>
+                    <button id="add-refaud"
+                        class="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-3 py-1 rounded-lg border border-neutral-700/80 font-medium text-[11px]">🎵
+                        + Audio</button>
+                </div>
+                <input id="fimg" type="file" accept="image/*" multiple hidden>
+                <input id="fvid" type="file" accept="video/*" hidden>
+                <input id="faud" type="file" accept="audio/*" multiple hidden>
+                <div id="reflist" class="flex flex-wrap gap-2 mt-1"></div>
+            </div>
+
+            <!-- Grilla Compacta de 2 Columnas para Formato, Calidad y Duración -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+
+                <!-- Formato -->
+                <div class="space-y-1">
+                    <span class="text-neutral-300 font-semibold text-[11px] block">Formato</span>
+                    <div id="aspect" class="row">
+                        <button class="chip on" data-a="16:9">16:9<small>horizontal</small></button>
+                        <button class="chip" data-a="9:16">9:16<small>vertical</small></button>
+                        <button class="chip" data-a="1:1">1:1<small>cuadrado</small></button>
+                    </div>
+                </div>
+
+                <!-- Calidad / Tamaño -->
+                <div class="space-y-1">
+                    <span class="text-neutral-300 font-semibold text-[11px] block">Calidad / tamaño</span>
+                    <div id="resbox" class="row"></div>
+                </div>
+
+                <!-- Duración (minutos + segundos, hasta 2:30 = límite nativo del modelo) -->
+                <div class="space-y-1.5 md:col-span-2">
+                    <div class="flex justify-between items-center text-[11px]">
+                        <span class="text-neutral-200 font-semibold">Duración <span class="text-neutral-500 font-normal">(escribe min y seg)</span></span>
+                        <span class="text-[10px] text-amber-400/80">⚠ &gt;15s es experimental · nativo hasta 2:30 · mucho más lento</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="durMin" min="0" max="2" value="0"
+                            class="w-16 bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:outline-none focus:border-blue-500">
+                        <span class="text-neutral-400 text-xs">min</span>
+                        <input type="number" id="durSec" min="0" max="59" value="8"
+                            class="w-16 bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:outline-none focus:border-blue-500">
+                        <span class="text-neutral-400 text-xs">seg</span>
+                        <span class="text-[11px] text-neutral-400 ml-1">= <b id="durTotal" class="text-blue-400">0:08</b></span>
+                    </div>
+                    <input type="hidden" id="dur" value="8">
+                </div>
+            </div>
+
+            <!-- Sección de Ajustes Avanzados AFUERA (Directamente Visibles en Cuadrícula Compacta) -->
+            <div class="pt-2 border-t border-neutral-800/80 space-y-2.5">
+                <span class="text-neutral-300 font-bold text-[11px] block tracking-wide">⚙️ Ajustes avanzados</span>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2.5 text-[11px]">
+                    <!-- Pasos -->
+                    <div class="space-y-1">
+                        <span class="text-neutral-400 font-medium block">Pasos <span class="text-neutral-500">(velocidad
+                                ⇄ calidad · default 20)</span></span>
+                        <div id="stepsbox" class="row">
+                            <button class="chip" data-s="5">5<small>ultrarrápido</small></button>
+                            <button class="chip" data-s="10">10<small>rápido</small></button>
+                            <button class="chip on" data-s="20">20<small>calidad</small></button>
+                        </div>
+                    </div>
+
+                    <!-- Turbo -->
+                    <div class="space-y-1">
+                        <span class="text-neutral-400 font-medium block">⚡ Turbo <span
+                                class="text-neutral-500">(SageAttention + EasyCache)</span></span>
+                        <div id="turbobox" class="row">
+                            <button class="chip" data-t="off">Off<small>calidad máx</small></button>
+                            <button class="chip" data-t="sage">Sage<small>~25% +</small></button>
+                            <button class="chip on" data-t="cache">Sage+Cache<small>~2.4× + · auto-off en 2K/4K/largos</small></button>
+                        </div>
+                    </div>
+
+                    <!-- Turbo LoRA (4-8 pasos, experimental) -->
+                    <div class="space-y-1">
+                        <span class="text-neutral-400 font-medium block">🧪 Turbo LoRA <span
+                                class="text-neutral-500">(4-8 pasos · experimental · +rápido en jobs grandes)</span></span>
+                        <div id="turboloraBox" class="row">
+                            <button class="chip" data-tl="off">Off</button>
+                            <button class="chip on" data-tl="on">On<small>~4-8 pasos</small></button>
+                        </div>
+                    </div>
+
+                    <!-- Spectrum (salta-pasos, apila sobre Turbo LoRA) -->
+                    <div class="space-y-1">
+                        <span class="text-neutral-400 font-medium block">⚡ Spectrum <span
+                                class="text-neutral-500">(predice y salta pasos · apila sobre Turbo LoRA · ~2× extra)</span></span>
+                        <div id="spectrumBox" class="row">
+                            <button class="chip on" data-sp="off">Off</button>
+                            <button class="chip" data-sp="on">On<small>+rápido</small></button>
+                        </div>
+                    </div>
+
+
+                    <!-- Offload -->
+                    <div class="space-y-1">
+                        <span class="text-neutral-400 font-medium block">🚀 Menos offload <span
+                                class="text-neutral-500">(mantiene en VRAM · ayuda en clips cortos)</span></span>
+                        <div id="membox" class="row">
+                            <button class="chip" data-m="off">Off</button>
+                            <button class="chip on" data-m="on">On<small>experimental</small></button>
+                        </div>
+                    </div>
+
+                    <!-- Escalar Calidad -->
+                    <div class="space-y-1">
+                        <span class="text-neutral-400 font-medium block">🔼 Escalar calidad <span
+                                class="text-neutral-500">(VSR real local)</span></span>
+                        <div id="upscalebox" class="row">
+                            <button class="chip on" data-u="off">Off</button>
+                            <button class="chip" data-u="flashfast_2x">⚡ VSR Rápido</button>
+                            <button class="chip" data-u="flashvsr_2x">✨ VSR Calidad</button>
+                        </div>
+                    </div>
+
+                    <!-- Seed -->
+                    <div class="space-y-1 md:col-span-2">
+                        <span class="text-neutral-400 font-medium block">Seed <span class="text-neutral-500">(vacío =
+                                aleatorio)</span></span>
+                        <div class="flex gap-2 max-w-xs">
+                            <input id="seed" type="number" min="0" placeholder="aleatorio"
+                                class="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1 text-xs text-white flex-1 focus:outline-none focus:border-blue-500">
+                            <button id="dice" title="Aleatorio"
+                                class="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg text-xs transition-all">🎲</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ETA Estimada y Errores Compactos -->
+            <div id="eta"
+                class="text-neutral-300 text-[11px] bg-neutral-900/90 border border-neutral-800 px-3 py-1.5 text-center font-medium rounded-xl">
+                Estimado total: ≈ 3m 25s–7m 9s (el escalado se suma tras generar; el tiempo exacto aparece al empezar)
+            </div>
+            <div id="err" class="text-red-300 text-xs bg-red-950/70 border border-red-800/70 rounded-xl px-3 py-1.5"
+                style="display:none"></div>
+
+            <!-- Hint de ComfyUI y GPU -->
+            <p class="text-[10px] text-neutral-500 text-center leading-normal font-medium">
+                Corre en tu ComfyUI local (MiniMax H3, INT8) sobre la RTX 3090 (24 GB). Nativo hasta 768 px de lado
+                corto. Si generas mientras hay uno en curso, el siguiente empieza solo al terminar.
+            </p>
+        </div>
+
+        <!-- Menú emergente al hacer clic en + -->
+        <div id="plusMenu"
+            class="menu-popover absolute bottom-16 left-2 bg-neutral-900/95 border border-neutral-800 rounded-2xl p-2 shadow-2xl opacity-0 scale-95 pointer-events-none flex flex-col gap-1 min-w-[210px] z-40 backdrop-blur-xl">
+            <button id="menuAddFirst"
+                class="menu-item flex items-center gap-3 w-full px-3 py-2 text-xs text-neutral-200 hover:bg-neutral-800 rounded-xl transition-colors">
+                <span class="text-base">🖼</span>
+                <span>+ Primer frame <span class="text-neutral-500">(imagen inicial)</span></span>
+            </button>
+            <button id="menuAddLast"
+                class="menu-item flex items-center gap-3 w-full px-3 py-2 text-xs text-neutral-200 hover:bg-neutral-800 rounded-xl transition-colors">
+                <span class="text-base">🎬</span>
+                <span>+ Último frame <span class="text-neutral-500">(imagen final)</span></span>
+            </button>
+            <input id="ffirst" type="file" accept="image/*" hidden>
+            <input id="flast" type="file" accept="image/*" hidden>
+            <div class="h-px bg-neutral-800 my-1"></div>
+            <button id="menuAddImg"
+                class="menu-item flex items-center gap-3 w-full px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800 rounded-xl transition-colors">
+                <span class="text-base">🖼</span>
+                <span>+ Imagen (Referencia)</span>
+            </button>
+            <button id="menuAddVid"
+                class="menu-item flex items-center gap-3 w-full px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800 rounded-xl transition-colors">
+                <span class="text-base">🎞</span>
+                <span>+ Video (Referencia)</span>
+            </button>
+            <button id="menuAddAud"
+                class="menu-item flex items-center gap-3 w-full px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800 rounded-xl transition-colors">
+                <span class="text-base">🎵</span>
+                <span>+ Audio (Referencia)</span>
+            </button>
+            <div class="h-px bg-neutral-800 my-1"></div>
+            <button id="menuToggleSettings"
+                class="menu-item flex items-center gap-3 w-full px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800 rounded-xl transition-colors">
+                <span class="text-base">⚙️</span>
+                <span>Formato y Parámetros</span>
+            </button>
+        </div>
+
+        <!-- Menú de opciones al subir un video -->
+        <div id="videoOptions"
+            class="menu-popover absolute bottom-full mb-3 left-2 right-2 bg-neutral-900/97 border border-blue-800/50 rounded-2xl p-3 shadow-2xl opacity-0 scale-95 pointer-events-none flex-col gap-2 z-50 backdrop-blur-xl"
+            style="display:none">
+            <div class="flex items-center gap-2 pb-2 border-b border-neutral-800">
+                <span class="text-base">🎞</span>
+                <span id="voName" class="text-xs font-semibold text-white truncate flex-1">video.mp4</span>
+                <span id="voMeta" class="text-[10px] text-neutral-400 shrink-0"></span>
+                <button id="voClose" class="text-neutral-500 hover:text-white text-sm shrink-0">✕</button>
+            </div>
+            <div class="text-[11px] text-neutral-400 pt-1">¿Qué quieres hacer con este video?</div>
+            <div class="grid grid-cols-2 gap-2">
+                <button id="voExtend" class="px-3 py-2.5 rounded-xl bg-blue-600/25 hover:bg-blue-600/45 border border-blue-500/50 text-xs font-semibold text-blue-100">⇢ Continuar / Extender</button>
+                <button id="voRef" class="px-3 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-100">🎞 Usar como referencia</button>
+            </div>
+            <div class="text-[11px] text-neutral-400 pt-1">🔼 Subir calidad (VSR real) <span id="voUpEta" class="text-neutral-500"></span></div>
+            <div class="grid grid-cols-2 gap-2">
+                <button id="voVsrFast" class="px-3 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-100">⚡ VSR Rápido</button>
+                <button id="voVsrQual" class="px-3 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-100">✨ VSR Calidad</button>
+            </div>
+        </div>
+
+        <!-- Bar contenedor flotante del input -->
+        <div
+            class="gowrap flex flex-col gap-2 bg-neutral-900/90 border border-neutral-800/90 focus-within:border-neutral-700 rounded-3xl p-2.5 pl-4 shadow-[0_20px_50px_rgba(0,0,0,0.9)] backdrop-blur-xl transition-all">
+
+            <!-- Previsualizaciones de archivos adjuntos (Mini Cuadritos de Imágenes / Videos / Audio) -->
+            <div id="attachBar" class="flex flex-wrap items-center gap-2 px-1 pt-0.5" style="display:none"></div>
+
+            <div class="flex items-center gap-2.5 w-full">
+                <!-- Badge de Cola -->
+                <span id="qbadge"
+                    class="absolute -top-3.5 right-14 bg-neutral-900 border border-blue-500 text-blue-400 font-bold text-[10px] px-3 py-0.5 rounded-full shadow-lg"
+                    style="display:none"></span>
+
+                <!-- Botón + Requerido -->
+                <button id="plusBtn" type="button" aria-label="Agregar o menú"
+                    class="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-neutral-200 hover:text-white transition-all duration-200 shrink-0">
+                    <svg id="plusIcon" class="w-5 h-5 transition-transform duration-300" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                </button>
+
+                <!-- Campo de entrada de texto (Prompt) -->
+                <input type="text" id="prompt"
+                    placeholder="Plano general al atardecer: un motociclista cruza una carretera desértica hacia las montañas, luz cálida, polvo tras las ruedas. Audio: rugido del motor, viento, música suave."
+                    class="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none px-2 py-1"
+                    autocomplete="off" />
+
+                <!-- Botón Ajustes ⚙️ -->
+                <button id="settingsToggleBtn" type="button" title="Parámetros y Formato"
+                    class="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800/90 hover:bg-neutral-700 text-neutral-400 hover:text-white transition-all shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+
+                <!-- Botón de enviar / Generar video -->
+                <button id="go" type="button" title="Generar video" aria-label="Generar video"
+                    class="flex items-center justify-center px-4 h-10 rounded-full bg-neutral-100 hover:bg-white text-black font-bold text-xs active:scale-95 transition-all duration-200 shrink-0 gap-1.5 shadow-lg">
+                    <span>Generar video</span>
+                    <svg class="w-4 h-4 transform rotate-90" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                            d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Lógica del Sistema Backend & Conexiones -->
+    <script>
+        const $ = id => document.getElementById(id);
+        const fmtTime = s => { s = Math.max(0, Math.round(s || 0)); const m = Math.floor(s / 60); return (m ? m + "m " : "") + (s % 60) + "s"; };
+        let toastT = null;
+        function toast(m) { const t = $("toast"); if (!t) return; t.textContent = m; t.classList.remove("opacity-0", "pointer-events-none"); t.classList.add("opacity-100", "pointer-events-auto"); clearTimeout(toastT); toastT = setTimeout(() => { t.classList.remove("opacity-100", "pointer-events-auto"); t.classList.add("opacity-0", "pointer-events-none"); }, 2600); }
+
+        // Resoluciones por formato
+        const RES = {
+            "16:9": [[640, 352, "360p"], [832, 480, "480p"], [1152, 640, "HD ★"], [1344, 768, "768p"], [2048, 1152, "2K ⚠ nativo"], [2560, 1440, "4K ⚠ nativo"]],
+            "9:16": [[352, 640, "360p"], [480, 832, "480p"], [640, 1152, "HD ★"], [768, 1344, "768p"], [1152, 2048, "2K ⚠ nativo"], [1440, 2560, "4K ⚠ nativo"]],
+            "1:1": [[512, 512, "512"], [640, 640, "640 ★"], [768, 768, "768p"], [1408, 1408, "2K ⚠ nativo"], [2048, 2048, "4K ⚠ nativo"]],
+        };
+        let mode = "t2v", aspect = "16:9", resIdx = 3, resW = 1344, resH = 768, steps = 20, turbo = "cache", upscale = "off", model = "int8", memBoost = "on", firstImage = null, lastImage = null, extending = null;
+        const MEM_FACTOR_EST = 0.85;
+        let currentProject = localStorage.getItem('lai_project') || 'General';
+        let projects = [];
+        let projMenuOpen = false;
+        let refImages = [], refVideo = null, refVideoAudio = true, refAudios = [];
+        const TURBO_FACTOR = { off: 1, sage: 0.78, cache: 0.42 };
+        let fitA = 3.1e-11, fitP = 1.5;
+
+        // Ajustes de menú flotante
+        const plusBtn = $('plusBtn');
+        const plusIcon = $('plusIcon');
+        const plusMenu = $('plusMenu');
+        const settingsPanel = $('settingsPanel');
+        const settingsToggleBtn = $('settingsToggleBtn');
+        const menuToggleSettings = $('menuToggleSettings');
+        const closeSettingsBtn = $('closeSettingsBtn');
+
+        let menuOpen = false;
+        let settingsOpen = false;
+
+        function togglePlusMenu() {
+            menuOpen = !menuOpen;
+            if (menuOpen) {
+                plusMenu.classList.remove('opacity-0', 'scale-95', 'pointer-events-none');
+                plusMenu.classList.add('opacity-100', 'scale-100', 'pointer-events-auto');
+                plusIcon.classList.add('rotate-45');
+            } else {
+                plusMenu.classList.remove('opacity-100', 'scale-100', 'pointer-events-auto');
+                plusMenu.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
+                plusIcon.classList.remove('rotate-45');
+            }
+        }
+
+        if (plusBtn) plusBtn.onclick = (e) => { e.stopPropagation(); togglePlusMenu(); };
+
+        function toggleSettings() {
+            settingsOpen = !settingsOpen;
+            if (settingsOpen) {
+                settingsPanel.classList.remove('hidden');
+                settingsPanel.classList.add('flex');
+            } else {
+                settingsPanel.classList.add('hidden');
+                settingsPanel.classList.remove('flex');
+            }
+        }
+
+        if (settingsToggleBtn) settingsToggleBtn.onclick = toggleSettings;
+        if (closeSettingsBtn) closeSettingsBtn.onclick = toggleSettings;
+        if (menuToggleSettings) menuToggleSettings.onclick = () => { togglePlusMenu(); if (!settingsOpen) toggleSettings(); };
+
+        // Controles de configuración
+        function renderRes() {
+            const box = $("resbox"); if (!box) return; box.innerHTML = ""; const list = RES[aspect];
+            if (resIdx >= list.length) resIdx = list.length - 1;
+            list.forEach((r, i) => {
+                const b = document.createElement("button");
+                b.className = "chip" + (i === resIdx ? " on" : "");
+                b.innerHTML = `${r[0]}×${r[1]}<small>${r[2]}</small>`;
+                b.onclick = () => { resIdx = i; resW = r[0]; resH = r[1]; renderRes(); updateEta(); }; box.appendChild(b);
+            });
+            resW = list[resIdx][0]; resH = list[resIdx][1];
+        }
+
+        if ($("aspect")) $("aspect").onclick = e => {
+            const b = e.target.closest("[data-a]"); if (!b) return; aspect = b.dataset.a;
+            [...$("aspect").children].forEach(x => x.classList.toggle("on", x.dataset.a === aspect)); renderRes(); updateEta();
+        };
+        if ($("stepsbox")) $("stepsbox").onclick = e => {
+            const b = e.target.closest("[data-s]"); if (!b) return; steps = +b.dataset.s;
+            [...$("stepsbox").children].forEach(x => x.classList.toggle("on", +x.dataset.s === steps)); updateEta();
+        };
+        if ($("turbobox")) $("turbobox").onclick = e => {
+            const b = e.target.closest("[data-t]"); if (!b) return; turbo = b.dataset.t;
+            [...$("turbobox").children].forEach(x => x.classList.toggle("on", x.dataset.t === turbo)); updateEta();
+        };
+        let turboLora = "on";
+        if ($("turboloraBox")) $("turboloraBox").onclick = e => {
+            const b = e.target.closest("[data-tl]"); if (!b) return; turboLora = b.dataset.tl;
+            [...$("turboloraBox").children].forEach(x => x.classList.toggle("on", x.dataset.tl === turboLora)); updateEta();
+        };
+        let spectrum = "off";
+        if ($("spectrumBox")) $("spectrumBox").onclick = e => {
+            const b = e.target.closest("[data-sp]"); if (!b) return; spectrum = b.dataset.sp;
+            [...$("spectrumBox").children].forEach(x => x.classList.toggle("on", x.dataset.sp === spectrum)); updateEta();
+        };
+        if ($("upscalebox")) $("upscalebox").onclick = e => {
+            const b = e.target.closest("[data-u]"); if (!b) return; upscale = b.dataset.u;
+            [...$("upscalebox").children].forEach(x => x.classList.toggle("on", x.dataset.u === upscale)); updateEta();
+        };
+        if ($("membox")) $("membox").onclick = e => {
+            const b = e.target.closest("[data-m]"); if (!b) return; memBoost = b.dataset.m;
+            [...$("membox").children].forEach(x => x.classList.toggle("on", x.dataset.m === memBoost)); updateEta();
+        };
+
+        if ($("tab-t2v")) $("tab-t2v").onclick = () => setMode("t2v");
+        if ($("tab-i2v")) $("tab-i2v").onclick = () => setMode("i2v");
+        if ($("tab-ref")) $("tab-ref").onclick = () => setMode("ref");
+
+        function setMode(m) {
+            mode = m;
+            ["t2v", "i2v", "ref"].forEach(x => {
+                const btn = $("tab-" + x);
+                if (btn) btn.classList.toggle("on", m === x);
+            });
+            if ($("imgbox")) $("imgbox").style.display = m === "i2v" ? "block" : "none";
+            if ($("refbox")) $("refbox").style.display = m === "ref" ? "flex" : "none";
+            renderAttachBar();
+        }
+
+        function frames(s) { let L = Math.max(5, Math.round(s * 24)); return L + (5 - (L % 17)) % 17; }
+
+        function updateEta() {
+            if (!$("dur") || !$("eta")) return;
+            const s = Number($("dur").value); const L = frames(s);
+            const mem = (memBoost === "on" ? MEM_FACTOR_EST : 1);
+            const effSteps = (turboLora === "on") ? Math.min(steps, 8) : steps;  // Turbo LoRA corre a 4-8 pasos
+            const spec = (spectrum === "on") ? 0.55 : 1;  // Spectrum salta ~½ de los evals (medido ~2×)
+            let lo = fitA * Math.pow(resW * resH * L, fitP) * (effSteps / 20) * TURBO_FACTOR[effectiveTurbo()] * mem * spec + 20;
+            let hi = lo * 1.8 + 60;
+            let up = "";
+            if (upscale !== "off") {
+                const sc = upscale.includes("4x") ? 4 : 2;
+                const k = upscale.startsWith("flashfast") ? 1.3e-6 : 1.6e-6;
+                const upT = k * (resW * sc) * (resH * sc) * L + 30;
+                lo += upT; hi += upT * 1.4;
+                up = ` &nbsp;·&nbsp; <b class="text-blue-400">escalado suma ≈ +${fmtTime(upT)}</b>`;
+            }
+            $("eta").innerHTML = `Estimado total: <b>≈ ${fmtTime(lo)}–${fmtTime(hi)}</b>${up} <span class="text-neutral-500">(el escalado se suma tras generar; el tiempo exacto aparece al empezar)</span>`;
+        }
+
+        // Duración por min+seg, tope 150s (2:30 = límite nativo del nodo H3)
+        function syncDur() {
+            let m = Math.max(0, Math.min(2, parseInt($("durMin").value) || 0));
+            let s = Math.max(0, Math.min(59, parseInt($("durSec").value) || 0));
+            let total = m * 60 + s;
+            if (total < 2) total = 2;
+            if (total > 150) { total = 150; }  // 2:30 máx real (3592 frames)
+            $("dur").value = total;
+            const mm = Math.floor(total / 60), ss = total % 60;
+            if ($("durTotal")) $("durTotal").textContent = mm + ":" + String(ss).padStart(2, '0');
+            updateEta();
+        }
+        if ($("durMin")) $("durMin").oninput = syncDur;
+        if ($("durSec")) $("durSec").oninput = syncDur;
+        if ($("durMin")) $("durMin").onblur = () => { if (parseInt($("durMin").value) > 2) { $("durMin").value = 2; $("durSec").value = 30; } syncDur(); };
+        if ($("dice")) $("dice").onclick = () => { if ($("seed")) $("seed").value = Math.floor(Math.random() * 2147483647); };
+        function showError(m) { const e = $("err"); if (e) { e.style.display = m ? "block" : "none"; e.textContent = m; } if (m) toast("⚠ " + m); }
+
+        // Subidas de referencia (Ref2VA)
+        async function uploadInput(file) {
+            const r = await fetch("/api/upload", { method: "POST", body: file, headers: { "X-Filename": file.name, "X-Content-Type": file.type || "application/octet-stream" } });
+            const d = await r.json(); if (!r.ok) throw new Error(d.error || "upload falló"); return d.name;
+        }
+
+        if ($("add-refimg")) $("add-refimg").onclick = () => $("fimg").click();
+        if ($("add-refvid")) $("add-refvid").onclick = () => $("fvid").click();
+        if ($("add-refaud")) $("add-refaud").onclick = () => $("faud").click();
+
+        if ($("menuAddImg")) $("menuAddImg").onclick = () => { togglePlusMenu(); $("fimg").click(); };
+        if ($("menuAddVid")) $("menuAddVid").onclick = () => { togglePlusMenu(); $("fvid").click(); };
+        if ($("menuAddAud")) $("menuAddAud").onclick = () => { togglePlusMenu(); $("faud").click(); };
+        if ($("menuAddFirst")) $("menuAddFirst").onclick = () => { togglePlusMenu(); $("ffirst").click(); };
+        if ($("menuAddLast")) $("menuAddLast").onclick = () => { togglePlusMenu(); $("flast").click(); };
+
+        // Primer / Último frame (image-to-video: H3 soporta ambos, no mid frame)
+        if ($("ffirst")) $("ffirst").onchange = async e => {
+            const f = e.target.files[0]; e.target.value = ""; if (!f) return; showError("");
+            try {
+                const n = await uploadInput(f); firstImage = n; window._firstImageUrl = URL.createObjectURL(f);
+                if (mode === "t2v") setMode("i2v"); renderAttachBar();
+            } catch (err) { showError(err.message); }
+        };
+        if ($("flast")) $("flast").onchange = async e => {
+            const f = e.target.files[0]; e.target.value = ""; if (!f) return; showError("");
+            try {
+                const n = await uploadInput(f); lastImage = n; window._lastImageUrl = URL.createObjectURL(f);
+                if (mode === "t2v") setMode("i2v"); renderAttachBar();
+            } catch (err) { showError(err.message); }
+        };
+
+        if ($("fimg")) $("fimg").onchange = async e => {
+            const fs = [...e.target.files]; e.target.value = ""; showError("");
+            for (const f of fs) {
+                if (refImages.length >= 3) { showError("Máximo 3 imágenes de referencia."); break; }
+                try { const n = await uploadInput(f); refImages.push({ name: n, url: URL.createObjectURL(f) }); } catch (err) { showError(err.message); }
+            }
+            setMode("ref");
+            renderRefs();
+        };
+
+        // Subir un video → menú de opciones (Continuar/Extender · Referencia · Subir calidad)
+        let pendingVideo = null;
+        function readVideoMeta(file) {
+            return new Promise((res) => {
+                const v = document.createElement('video'); v.preload = 'metadata';
+                v.onloadedmetadata = () => { res({ w: v.videoWidth, h: v.videoHeight, dur: v.duration || 0 }); try { URL.revokeObjectURL(v.src); } catch (e) { } };
+                v.onerror = () => res({ w: 0, h: 0, dur: 0 });
+                v.src = URL.createObjectURL(file);
+            });
+        }
+        function curProj() { return currentProject === '__master__' ? 'General' : currentProject; }
+        function showVideoOptions() {
+            const m = $("videoOptions"); if (!m || !pendingVideo) return;
+            $("voName").textContent = pendingVideo.label;
+            $("voMeta").textContent = (pendingVideo.w ? pendingVideo.w + "×" + pendingVideo.h : "") + (pendingVideo.dur ? " · " + pendingVideo.dur.toFixed(1) + "s" : "");
+            if (pendingVideo.w && pendingVideo.dur) {
+                const L = Math.round(pendingVideo.dur * 24), px = (pendingVideo.w * 2) * (pendingVideo.h * 2);
+                $("voUpEta").textContent = "· ⚡≈" + fmtTime(1.3e-6 * px * L + 30) + " · ✨≈" + fmtTime(1.6e-6 * px * L + 30);
+            } else $("voUpEta").textContent = "";
+            m.style.display = "flex";
+            requestAnimationFrame(() => { m.classList.remove('opacity-0', 'scale-95', 'pointer-events-none'); m.classList.add('opacity-100', 'scale-100', 'pointer-events-auto'); });
+        }
+        function hideVideoOptions() {
+            const m = $("videoOptions"); if (!m) return;
+            m.classList.add('opacity-0', 'scale-95', 'pointer-events-none'); m.classList.remove('opacity-100', 'scale-100', 'pointer-events-auto');
+            setTimeout(() => { if (m.classList.contains('opacity-0')) m.style.display = "none"; }, 260);
+        }
+        async function importPendingVideo() {
+            const r = await fetch("/api/import-video", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: pendingVideo.inputName, label: pendingVideo.label, project: curProj() }) });
+            const d = await r.json(); if (!r.ok) throw new Error(d.error || "No se pudo importar"); return d;
+        }
+        if ($("fvid")) $("fvid").onchange = async e => {
+            const f = e.target.files[0]; e.target.value = ""; if (!f) return; showError("");
+            const meta = await readVideoMeta(f);
+            toast("📤 Subiendo video…");
+            try { const n = await uploadInput(f); pendingVideo = { inputName: n, label: f.name, w: meta.w, h: meta.h, dur: meta.dur }; showVideoOptions(); }
+            catch (err) { showError(err.message); }
+        };
+        if ($("voClose")) $("voClose").onclick = hideVideoOptions;
+        if ($("voRef")) $("voRef").onclick = () => {
+            refVideo = { name: pendingVideo.inputName, label: pendingVideo.label };
+            setMode("ref"); renderRefs(); hideVideoOptions();
+            toast("🎞 Video añadido como referencia — escribe el prompt y Genera");
+        };
+        if ($("voExtend")) $("voExtend").onclick = async () => {
+            hideVideoOptions();
+            try { toast("⏳ Importando video…"); const d = await importPendingVideo(); loadLibrary(); loadProjects(); openCreative({ filename: d.filename, width: d.width, height: d.height }); setCreativeAction('extend'); }
+            catch (e) { showError(e.message); }
+        };
+        if ($("voVsrFast")) $("voVsrFast").onclick = async () => { hideVideoOptions(); try { toast("⏳ Importando video…"); const d = await importPendingVideo(); loadLibrary(); queueUpscale(d.filename, "flashfast_2x"); } catch (e) { showError(e.message); } };
+        if ($("voVsrQual")) $("voVsrQual").onclick = async () => { hideVideoOptions(); try { toast("⏳ Importando video…"); const d = await importPendingVideo(); loadLibrary(); queueUpscale(d.filename, "flashvsr_2x"); } catch (e) { showError(e.message); } };
+
+        if ($("faud")) $("faud").onchange = async e => {
+            const fs = [...e.target.files]; e.target.value = ""; showError("");
+            for (const f of fs) {
+                if (refAudios.length >= 3) { showError("Máximo 3 audios de referencia."); break; }
+                try { const n = await uploadInput(f); refAudios.push({ name: n, label: f.name }); } catch (err) { showError(err.message); }
+            }
+            setMode("ref");
+            renderRefs();
+        };
+
+        // Renderizar barra flotante de previsualización (Cuadritos Miniatura con Etiqueta Clara)
+        function renderAttachBar() {
+            const bar = $("attachBar"); if (!bar) return; bar.innerHTML = "";
+            let count = 0;
+
+            // Imagen inicial (First Frame)
+            if (firstImage) {
+                count++;
+                const imgUrl = window._firstImageUrl || "";
+                const el = document.createElement("div");
+                el.className = "flex items-center gap-2 bg-neutral-800/95 border border-blue-500/80 px-2.5 py-1 rounded-xl text-xs text-neutral-200 shadow-lg shrink-0 group";
+                el.innerHTML = `
+          ${imgUrl ? `<img src="${imgUrl}" class="w-8 h-8 object-cover rounded-lg">` : `<span class="text-base">🖼</span>`}
+          <div class="flex flex-col">
+            <span class="font-bold text-[11px] text-blue-300">Imagen Inicial</span>
+            <span class="text-[9px] text-neutral-400">Primer frame</span>
+          </div>
+          <button title="Quitar imagen inicial" class="text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs">✕</button>
+        `;
+                el.querySelector("button").onclick = () => { resetDrop(); };
+                bar.appendChild(el);
+            }
+
+            // Último frame (Last Frame)
+            if (lastImage) {
+                count++;
+                const imgUrl = window._lastImageUrl || "";
+                const el = document.createElement("div");
+                el.className = "flex items-center gap-2 bg-neutral-800/95 border border-purple-500/80 px-2.5 py-1 rounded-xl text-xs text-neutral-200 shadow-lg shrink-0 group";
+                el.innerHTML = `
+          ${imgUrl ? `<img src="${imgUrl}" class="w-8 h-8 object-cover rounded-lg">` : `<span class="text-base">🎬</span>`}
+          <div class="flex flex-col">
+            <span class="font-bold text-[11px] text-purple-300">Último Frame</span>
+            <span class="text-[9px] text-neutral-400">Frame final</span>
+          </div>
+          <button title="Quitar último frame" class="text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs">✕</button>
+        `;
+                el.querySelector("button").onclick = () => { lastImage = null; window._lastImageUrl = null; renderAttachBar(); };
+                bar.appendChild(el);
+            }
+
+            // Imágenes de referencia (Ref2V)
+            refImages.forEach((r, i) => {
+                count++;
+                const el = document.createElement("div");
+                el.className = "flex items-center gap-2 bg-neutral-800/95 border border-blue-500/60 px-2.5 py-1 rounded-xl text-xs text-neutral-200 shadow-lg shrink-0 group";
+                el.innerHTML = `
+          <img src="${r.url}" class="w-8 h-8 object-cover rounded-lg">
+          <div class="flex flex-col">
+            <span class="font-bold text-[11px] text-white">Referencia ${i + 1}</span>
+            <span class="text-[9px] text-neutral-400">Imagen</span>
+          </div>
+          <button title="Quitar" class="text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs">✕</button>
+        `;
+                el.querySelector("button").onclick = () => { refImages.splice(i, 1); renderRefs(); };
+                bar.appendChild(el);
+            });
+
+            // Video de referencia
+            if (refVideo) {
+                count++;
+                const el = document.createElement("div");
+                el.className = "flex items-center gap-2 bg-neutral-800/95 border border-blue-500/60 px-2.5 py-1 rounded-xl text-xs text-neutral-200 shrink-0 shadow-lg";
+                el.innerHTML = `
+          <span class="text-base">🎞</span>
+          <div class="flex flex-col max-w-[130px]">
+            <span class="font-bold text-[11px] text-white truncate">${refVideo.label}</span>
+            <span class="text-[9px] text-blue-300">Video Ref</span>
+          </div>
+          <button class="rx text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs">✕</button>
+        `;
+                el.querySelector(".rx").onclick = () => { refVideo = null; renderRefs(); };
+                bar.appendChild(el);
+            }
+
+            // Audios de referencia
+            refAudios.forEach((r, i) => {
+                count++;
+                const el = document.createElement("div");
+                el.className = "flex items-center gap-2 bg-neutral-800/95 border border-neutral-700 px-2.5 py-1 rounded-xl text-xs text-neutral-200 shrink-0 shadow-lg";
+                el.innerHTML = `
+          <span class="text-base">🎵</span>
+          <div class="flex flex-col max-w-[130px]">
+            <span class="font-bold text-[11px] text-white truncate">${r.label}</span>
+            <span class="text-[9px] text-neutral-400">Audio Ref</span>
+          </div>
+          <button class="rx text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs">✕</button>
+        `;
+                el.querySelector(".rx").onclick = () => { refAudios.splice(i, 1); renderRefs(); };
+                bar.appendChild(el);
+            });
+
+            bar.style.display = count > 0 ? "flex" : "none";
+        }
+
+        function renderRefs() {
+            const box = $("reflist"); if (!box) return; box.innerHTML = "";
+            refImages.forEach((r, i) => {
+                const el = document.createElement("div");
+                el.className = "flex items-center gap-2 bg-neutral-800 border border-neutral-700 px-3 py-1.5 rounded-xl text-xs text-neutral-200";
+                el.innerHTML = `<img src="${r.url}" class="w-8 h-8 object-cover rounded-lg"><span>🖼 Imagen ${i + 1}</span><button class="rx text-neutral-400 hover:text-red-400 ml-auto font-bold">✕</button>`;
+                el.querySelector(".rx").onclick = () => { refImages.splice(i, 1); renderRefs(); }; box.appendChild(el);
+            });
+            if (refVideo) {
+                const el = document.createElement("div");
+                el.className = "flex items-center gap-2 bg-neutral-800 border border-blue-500/60 px-3.5 py-1.5 rounded-xl text-xs text-neutral-200 w-full";
+                el.innerHTML = `<span class="flex-1 truncate font-medium">🎞 ${refVideo.label} <small class="text-neutral-400">(v2v)</small></span>
+          <label class="text-neutral-400 text-[11px] flex items-center gap-1.5"><input type="checkbox" id="rvaud" ${refVideoAudio ? "checked" : ""}>su audio</label>
+          <button class="rx text-neutral-400 hover:text-red-400 ml-2 font-bold">✕</button>`;
+                el.querySelector("#rvaud").onchange = ev => refVideoAudio = ev.target.checked;
+                el.querySelector(".rx").onclick = () => { refVideo = null; renderRefs(); }; box.appendChild(el);
+            }
+            refAudios.forEach((r, i) => {
+                const el = document.createElement("div");
+                el.className = "flex items-center gap-2 bg-neutral-800 border border-neutral-700 px-3.5 py-1.5 rounded-xl text-xs text-neutral-200";
+                el.innerHTML = `<span class="flex-1 truncate font-medium">🎵 ${r.label}</span><button class="rx text-neutral-400 hover:text-red-400 ml-auto font-bold">✕</button>`;
+                el.querySelector(".rx").onclick = () => { refAudios.splice(i, 1); renderRefs(); }; box.appendChild(el);
+            });
+            renderAttachBar();
+        }
+
+        // Evento para PEGAR IMÁGENES CON CTRL+V
+        document.addEventListener("paste", async (e) => {
+            const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+            if (!items) return;
+            for (const item of items) {
+                if (item.type.indexOf("image") === 0) {
+                    const file = item.getAsFile();
+                    if (!file) continue;
+                    e.preventDefault();
+                    toast("📋 Subiendo imagen pegada…");
+                    try {
+                        const n = await uploadInput(file);
+                        const url = URL.createObjectURL(file);
+                        if (!firstImage && mode !== "ref") {
+                            firstImage = n;
+                            window._firstImageUrl = url;
+                            setMode("i2v");
+                            const drop = $("drop");
+                            if (drop) {
+                                drop.classList.add("has");
+                                drop.innerHTML = `<button class="x" title="Quitar">✕</button><img src="${url}">`;
+                                drop.querySelector(".x").onclick = ev => { ev.stopPropagation(); resetDrop(); };
+                            }
+                        } else {
+                            if (refImages.length >= 3) { showError("Máximo 3 imágenes de referencia."); break; }
+                            refImages.push({ name: n, url });
+                            setMode("ref");
+                        }
+                        renderRefs();
+                        toast("✓ Imagen pegada correctamente");
+                    } catch (err) {
+                        showError(err.message);
+                    }
+                }
+            }
+        });
+
+        // Subida de imagen (i2v)
+        async function onFile(e) {
+            const f = e.target.files[0]; if (!f) return; showError("");
+            try {
+                const r = await fetch("/api/upload", { method: "POST", body: f, headers: { "X-Filename": f.name, "X-Content-Type": f.type || "image/png" } });
+                const d = await r.json(); if (!r.ok) throw new Error(d.error || "upload falló"); firstImage = d.name;
+                const url = URL.createObjectURL(f);
+                window._firstImageUrl = url;
+                setMode("i2v");
+                const drop = $("drop"); if (drop) {
+                    drop.classList.add("has");
+                    drop.innerHTML = `<button class="x" title="Quitar">✕</button><img src="${url}">`;
+                    drop.querySelector(".x").onclick = ev => { ev.stopPropagation(); resetDrop(); };
+                }
+                renderAttachBar();
+            } catch (err) { showError(err.message); }
+        }
+        function bindFile() { const el = $("file"); if (el) el.onchange = onFile; }
+        function resetDrop() {
+            firstImage = null; window._firstImageUrl = null; const d = $("drop"); if (!d) return; d.classList.remove("has");
+            d.innerHTML = `<span>Arrastra o haz clic para subir una imagen inicial</span><input type="file" id="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer">`;
+            bindFile();
+            renderAttachBar();
+        }
+
+        // Extensión / Upscale
+        function startExtend(it) {
+            // Extender SIEMPRE va al chat: abre el Espacio Creativo con ese video en modo Extender.
+            // El chat maneja qué se extenderá (tu prompt). Nada de extender en un clic "a la ligera".
+            openCreative(it);
+            setCreativeAction('extend');
+            toast("⇢ Extender: escribe abajo cómo continúa y pulsa Extender");
+        }
+
+        function clearExtend() {
+            extending = null;
+            if ($("extbanner")) $("extbanner").style.display = "none";
+            if ($("prompt")) $("prompt").placeholder = "Plano general al atardecer: un motociclista cruza una carretera desértica hacia las montañas, luz cálida, polvo tras las ruedas. Audio: rugido del motor, viento, música suave.";
+        }
+
+        if ($("extcancel")) $("extcancel").onclick = clearExtend;
+        if ($("extbtn")) $("extbtn").onclick = () => { if (window._lastResult) startExtend(window._lastResult); };
+        if ($("upfastbtn")) $("upfastbtn").onclick = () => { if (window._lastResult) queueUpscale(window._lastResult.filename, "flashfast_2x"); };
+        if ($("upfvbtn")) $("upfvbtn").onclick = () => { if (window._lastResult) queueUpscale(window._lastResult.filename, "flashvsr_2x"); };
+        if ($("rife2btn")) $("rife2btn").onclick = () => { if (window._lastResult) queueInterp(window._lastResult.filename, 2); };
+        if ($("rife3btn")) $("rife3btn").onclick = () => { if (window._lastResult) queueInterp(window._lastResult.filename, 3); };
+        if ($("newgen")) $("newgen").onclick = () => {
+            if ($("resultbar")) $("resultbar").style.display = "none";
+            if ($("player")) { $("player").pause(); $("player").classList.add("hidden"); }
+            if ($("empty")) $("empty").style.display = "flex";
+        };
+
+        // Pipeline de trabajos
+        let activeJob = null, queue = [], paused = false, pollAbort = false, bgMode = false;
+
+        function setGenPill(text, show) {
+            const p = $("genpill"); if (!p) return;
+            if (show) { p.style.display = "flex"; if (text && $("genpilltxt")) $("genpilltxt").textContent = text; }
+            else p.style.display = "none";
+        }
+
+        function updateQueueBadge() {
+            const b = $("qbadge"); if (!b) return;
+            if (queue.length) { b.style.display = "inline-flex"; b.textContent = "▸ " + queue.length + " en cola"; }
+            else b.style.display = "none";
+        }
+
+        function setBar(p, reset) {
+            const r = $("ring"); if (!r) return;
+            if (reset) { r.style.setProperty("--p", 0); if ($("ringtxt")) $("ringtxt").textContent = "0%"; return; }
+            p = Math.min(100, p);
+            if (p > (+r.style.getPropertyValue("--p") || 0)) {
+                r.style.setProperty("--p", p);
+                if ($("ringtxt")) $("ringtxt").textContent = Math.round(p) + "%";
+            }
+        }
+
+        function setBusy(b) {
+            if ($("prog")) $("prog").style.display = b ? "flex" : "none";
+            if (b) {
+                if ($("empty")) $("empty").style.display = "none";
+                if ($("player")) $("player").classList.add("hidden");
+                if ($("resultbar")) $("resultbar").style.display = "none";
+            }
+        }
+
+        async function submitJob(spec) {
+            if (activeJob) { queue.push(spec); updateQueueBadge(); toast("➕ Añadido a la cola · empezará al terminar el actual"); return; }
+            await startJob(spec);
+        }
+
+        async function startJob(spec, cont) {
+            activeJob = { id: null, info: spec.info, pending: true };  // reclama el turno YA (evita doble envío simultáneo)
+            showError(""); pollAbort = false; paused = false;
+            if ($("pausebtn")) $("pausebtn").textContent = "⏸ Pausar";
+            // Continuación de cola con un video ya a la vista → genera "de fondo": NO tapa el
+            // video que acabas de hacer; el progreso se ve en la píldora inferior.
+            bgMode = !!(cont && window._lastResult);
+            if (!bgMode) {
+                setBusy(true); setBar(0, true);
+                if ($("progtxt")) $("progtxt").textContent = spec.startLabel || "Enviando…";
+                if ($("progeta")) $("progeta").textContent = "";
+                if ($("progsub")) $("progsub").textContent = "";
+            }
+            setGenPill("⏳ Generando video…", true);
+            try {
+                const r = await fetch(spec.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(spec.payload) });
+                const d = await r.json(); if (!r.ok) throw new Error(d.error || "No se pudo iniciar.");
+                if (spec.onStart) spec.onStart(d);
+                activeJob = {
+                    id: d.prompt_id, info: {
+                        w: d.width || spec.info.w, h: d.height || spec.info.h,
+                        seed: (d.seed != null ? d.seed : (spec.info.seed != null ? spec.info.seed : 0)),
+                        length: d.length || spec.info.length || 0
+                    }
+                };
+                poll(activeJob.id, activeJob.info);
+            } catch (err) { activeJob = null; if (!bgMode) { setBusy(false); if ($("empty") && !window._lastResult) $("empty").style.display = "flex"; } if (!queue.length) setGenPill("", false); showError(err.message); nextJob(); }
+        }
+
+        function nextJob() { if (queue.length) { const s = queue.shift(); updateQueueBadge(); startJob(s, true); } else setGenPill("", false); }
+
+        function poll(id, info) {
+            const tick = async () => {
+                if (pollAbort) return;
+                try {
+                    const r = await fetch("/api/status?id=" + encodeURIComponent(id)); const d = await r.json();
+                    if (d.status === "paused") {
+                        if ($("progtxt")) $("progtxt").textContent = "⏸ Pausado";
+                        if ($("progeta")) $("progeta").textContent = "En pausa — reanuda cuando quieras";
+                    } else {
+                        if (typeof d.pct === "number") setBar(d.pct);
+                        if (d.stage && $("progtxt")) $("progtxt").textContent = d.stage;
+                        if ($("progeta")) $("progeta").textContent = (d.eta != null && d.eta > 0) ? `faltan ~${fmtTime(d.eta)}`
+                            : ((typeof d.pct === "number" && d.pct < 42) ? "Cargando modelos… (calculando)" : "");
+                        const el = (d.elapsed != null ? d.elapsed : 0);
+                        if ($("progsub")) $("progsub").textContent = `${info.w}×${info.h} · ${(info.length / 24).toFixed(1)}s · seed ${info.seed} · transcurrido ${fmtTime(el)}`;
+                        // Píldora inferior (sirve también cuando genera "de fondo")
+                        const pctTxt = (typeof d.pct === "number") ? ` ${Math.round(d.pct)}%` : "";
+                        const etaTxt = (d.eta != null && d.eta > 0) ? ` · faltan ~${fmtTime(d.eta)}` : "";
+                        setGenPill(`⏳ Generando video…${pctTxt}${etaTxt}` + (queue.length ? ` · +${queue.length} en cola` : ""), true);
+                        if (d.status === "done") { onDone(d.name, d.gen_seconds, info); return; }
+                        if (d.status === "error") { activeJob = null; if (!bgMode) { setBusy(false); if ($("empty") && !window._lastResult) $("empty").style.display = "flex"; } if (!queue.length) setGenPill("", false); showError(d.error || "Falló la generación."); nextJob(); return; }
+                    }
+                } catch (e) { }
+                setTimeout(tick, 1000);
+            }; tick();
+        }
+
+        function onDone(name, gen, info) {
+            setBar(100); if ($("progtxt")) $("progtxt").textContent = "¡Listo!";
+            setTimeout(() => {
+                activeJob = null;
+                const p = $("player");
+                if (p) {
+                    p.src = "/api/video?name=" + encodeURIComponent(name);
+                    p.classList.remove("hidden");
+                    p.load();
+                    p.play().catch(() => { });
+                }
+                if ($("prog")) $("prog").style.display = "none";
+                if ($("empty")) $("empty").style.display = "none";
+                if ($("resulttag")) $("resulttag").textContent = `✓ LISTO · ${info.w}×${info.h} · seed ${info.seed}` + (gen ? ` · ⏱ ${fmtTime(gen)}` : "");
+                if ($("dl")) { $("dl").href = "/api/video?name=" + encodeURIComponent(name); $("dl").download = name.split("/").pop(); }
+                window._lastResult = { filename: name, width: info.w, height: info.h };
+                if ($("resultbar")) $("resultbar").style.display = "flex";
+                loadLibrary();
+                nextJob();
+            }, 400);
+        }
+
+        // Guardián de VRAM: evita configs que agotan los 24 GB de la 3090 y crashean ComfyUI.
+        // Datos reales: 768×768×15s (213M px·frames) corrió; 1344×768×15s (374M) crasheó.
+        function vramTooHeavy() {
+            const L = frames(Number($("dur").value) || 15);
+            let weight = resW * resH * L;
+            if (memBoost === "on") weight *= 1.15;   // menos offload = más VRAM
+            if (turboLora === "on") weight *= 1.05;   // el LoRA suma un poco
+            return weight > 300000000;
+        }
+        // Sage (kernel Triton) es rápido pero crashea ("illegal memory access") en shapes
+        // grandes/largos en la 3090. Zona estable comprobada: ≤768p y clips cortos. Fuera de
+        // eso lo apagamos solo (Turbo LoRA, que da el grueso del ahorro, sigue activo).
+        function effectiveTurbo() {
+            if (turbo === "off") return "off";
+            const secs = Number($("dur") ? $("dur").value : 8) || 8;
+            if (resW * resH > 1032192 || secs > 20) return "off";  // 2K/4K o clips largos
+            return turbo;
+        }
+        function buildGenerateSpec() {
+            const prompt = $("prompt") ? $("prompt").value.trim() : "";
+
+            // Auto-detectar modo si el usuario pegó/subió una imagen
+            if ((firstImage || lastImage) && mode === "t2v") {
+                setMode("i2v");
+            } else if ((refImages.length || refVideo || refAudios.length) && mode === "t2v") {
+                setMode("ref");
+            }
+
+            const hasRef = refImages.length || refVideo || refAudios.length;
+            if (extending) {
+                if (!extending.source) { showError("No hay video que extender."); return null; }
+                return {
+                    endpoint: "/api/extend", startLabel: "Extendiendo…",
+                    payload: { source: extending.source, prompt, seconds: Number($("dur").value), steps, turbo, upscale },
+                    info: { w: extending.w, h: extending.h }, onStart: () => clearExtend()
+                };
+            }
+            if (mode !== "ref" && !prompt) { showError("Escribe un prompt."); return null; }
+            if (mode === "i2v" && !firstImage && !lastImage) { showError("Sube un primer o último frame, o cambia a Texto → Video."); return null; }
+            if (mode === "ref" && !hasRef) { showError("Añade al menos una referencia (imagen, video o audio)."); return null; }
+            const sv = $("seed") ? $("seed").value.trim() : "";
+            // Config pesada para 24 GB: activa Sage (atención con menos memoria) y no retiene
+            // extra en VRAM, para intentar que quepa sin crashear (en vez de bloquearla).
+            let effTurbo = effectiveTurbo(), effMemOn = (memBoost === "on");
+            if (turbo !== "off" && effTurbo === "off") {
+                toast("⚠ Sage se auto-apagó (2K/4K o clip largo — ahí crashea el kernel Triton). Turbo LoRA sigue activo.");
+            }
+            if (vramTooHeavy()) {
+                // Config muy pesada para 24 GB → además soltamos 'menos offload' para que quepa.
+                effTurbo = "off";
+                effMemOn = false;
+                toast("⚠ Config pesada para 24 GB — desactivé aceleradores y 'menos offload' para que NO crashee (Turbo LoRA sigue activo).");
+            }
+            const p = {
+                mode, prompt, width: resW, height: resH, seconds: Number($("dur").value), steps, turbo: effTurbo, upscale, model, aspect,
+                mem_factor: effMemOn ? 0.5 : null, turbo_lora: turboLora === "on", spectrum: spectrum === "on", seed: sv === "" ? null : Number(sv),
+                project: currentProject === '__master__' ? 'General' : currentProject,
+                first_image: mode !== "ref" ? (firstImage || null) : null,
+                last_image: mode !== "ref" ? (lastImage || null) : null
+            };
+            if (mode === "ref") {
+                p.ref_images = refImages.map(r => r.name); p.ref_video = refVideo ? refVideo.name : null;
+                p.ref_video_audio = refVideoAudio; p.ref_audios = refAudios.map(r => r.name);
+            }
+            return { endpoint: "/api/generate", startLabel: "Enviando…", payload: p, info: { w: resW, h: resH } };
+        }
+
+        let lastGoClick = 0;
+        if ($("go")) $("go").onclick = () => {
+            const now = Date.now(); if (now - lastGoClick < 1200) return; lastGoClick = now;  // anti-rebote: ignora doble-clic accidental
+            if (creativeMode) { creativeSubmitFromChat(); return; }   // en el Espacio Creativo: ＋ nuevo segmento o ⇢ extender, según el modo
+            const spec = buildGenerateSpec(); if (!spec) return; showError(""); submitJob(spec);
+        };
+
+        function queueUpscale(name, up) {
+            closeLibrary();
+            submitJob({
+                endpoint: "/api/upscale", startLabel: "Escalando — " + (up.startsWith("flashfast") ? "VSR Rápido" : "VSR Calidad"),
+                payload: { source: name, upscale: up }, info: { w: 0, h: 0, seed: 0 }
+            });
+        }
+
+        function queueInterp(name, mult) {
+            closeLibrary();
+            submitJob({
+                endpoint: "/api/interpolate", startLabel: "Interpolando (RIFE) → " + (24 * mult) + " fps",
+                payload: { source: name, multiplier: mult }, info: { w: 0, h: 0, seed: 0 }
+            });
+        }
+
+        if ($("cancelbtn")) $("cancelbtn").onclick = async () => {
+            pollAbort = true;
+            try { await fetch("/api/cancel", { method: "POST" }); } catch (e) { }
+            activeJob = null; paused = false; if ($("pausebtn")) $("pausebtn").textContent = "⏸ Pausar";
+            setBusy(false); if ($("empty")) $("empty").style.display = "flex"; showError("Generación cancelada.");
+            nextJob();
+        };
+
+        if ($("pausebtn")) $("pausebtn").onclick = async () => {
+            if (!paused) {
+                try {
+                    const r = await fetch("/api/pause", { method: "POST" }); const d = await r.json();
+                    if (!r.ok || !d.ok) { showError(d.error || "No pude pausar."); return; }
+                    paused = true; if ($("pausebtn")) $("pausebtn").textContent = "▶ Reanudar"; if ($("progtxt")) $("progtxt").textContent = "⏸ Pausado";
+                } catch (e) { showError("No pude pausar."); }
+            } else {
+                try { await fetch("/api/resume", { method: "POST" }); } catch (e) { }
+                paused = false; if ($("pausebtn")) $("pausebtn").textContent = "⏸ Pausar"; if ($("progtxt")) $("progtxt").textContent = "Reanudando…";
+            }
+        };
+
+        // Biblioteca Modal Espacial
+        function openLibrary() {
+            const lib = $("lib"); if (!lib) return;
+            lib.classList.remove('opacity-0', 'pointer-events-none');
+            lib.classList.add('opacity-100', 'pointer-events-auto');
+            loadLibrary();
+        }
+
+        function closeLibrary() {
+            const lib = $("lib"); if (!lib) return;
+            lib.classList.remove('opacity-100', 'pointer-events-auto');
+            lib.classList.add('opacity-0', 'pointer-events-none');
+        }
+
+        if ($("openlib")) $("openlib").onclick = openLibrary;
+        if ($("closelib")) $("closelib").onclick = closeLibrary;
+        document.addEventListener("keydown", e => { if (e.key === "Escape") closeLibrary(); });
+
+        // ── Proyectos (cada proyecto = biblioteca propia · Master = todos) ──
+        function projLabel() { return currentProject === '__master__' ? '🗂 Master' : currentProject; }
+        function renderProjName() { const n = $("projName"); if (n) n.textContent = projLabel(); }
+        function toggleProjMenu(force) {
+            projMenuOpen = (force != null ? force : !projMenuOpen);
+            const m = $("projMenu"); if (!m) return;
+            if (projMenuOpen) { m.classList.remove('opacity-0', 'scale-95', 'pointer-events-none'); m.classList.add('opacity-100', 'scale-100', 'pointer-events-auto'); }
+            else { m.classList.add('opacity-0', 'scale-95', 'pointer-events-none'); m.classList.remove('opacity-100', 'scale-100', 'pointer-events-auto'); }
+        }
+        function selectProject(key) {
+            currentProject = key; localStorage.setItem('lai_project', key);
+            renderProjName(); renderProjMenu(); toggleProjMenu(false); loadLibrary();
+            toast(key === '__master__' ? '🗂 Master: todos los proyectos' : '📁 Proyecto: ' + key);
+        }
+        function renderProjMenu() {
+            const list = $("projList"); if (!list) return; list.innerHTML = "";
+            const mk = (key, label, count) => {
+                const b = document.createElement("button");
+                const on = currentProject === key;
+                b.className = "flex items-center gap-2 w-full px-3 py-2 text-xs rounded-xl transition-colors " + (on ? "bg-blue-600/25 text-white border border-blue-500/40" : "text-neutral-300 hover:bg-neutral-800 border border-transparent");
+                b.innerHTML = `<span class="flex-1 text-left truncate">${label}</span>` + (count != null ? `<span class="text-[10px] text-neutral-500">${count}</span>` : "");
+                b.onclick = () => selectProject(key);
+                list.appendChild(b);
+            };
+            mk('__master__', '🗂 Master (todos)', projects.reduce((s, p) => s + (p.count || 0), 0));
+            projects.forEach(p => mk(p.name, '📁 ' + p.name, p.count));
+        }
+        async function loadProjects() {
+            try { const r = await fetch('/api/projects'); projects = (await r.json()).projects || []; } catch (e) { projects = []; }
+            if (currentProject !== '__master__' && !projects.some(p => p.name === currentProject)) currentProject = 'General';
+            renderProjName(); renderProjMenu();
+        }
+        if ($("projBtn")) $("projBtn").onclick = (e) => { e.stopPropagation(); toggleProjMenu(); };
+        if ($("projNew")) $("projNew").onclick = async () => {
+            const name = window.prompt("Nombre del nuevo proyecto:"); if (!name || !name.trim()) return;
+            try {
+                const r = await fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) });
+                const d = await r.json(); if (!r.ok) throw new Error(d.error || 'No se pudo crear');
+                await loadProjects(); selectProject(d.name);
+                toast('📁 Proyecto creado: ' + d.name);
+            } catch (err) { showError(err.message); }
+        };
+
+        async function moveToProject(it) {
+            const dest = window.prompt("Mover este video a proyecto (nombre existente o nuevo):", currentProject === '__master__' ? 'General' : currentProject);
+            if (!dest || !dest.trim()) return;
+            try {
+                const r = await fetch("/api/move-project", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: it.id, project: dest.trim() }) });
+                const d = await r.json(); if (!r.ok) throw new Error(d.error || "No se pudo mover");
+                await loadProjects(); loadLibrary(); toast("📁 Movido a: " + d.project);
+            } catch (e) { showError(e.message); }
+        }
+
+        async function loadLibrary() {
+            try {
+                const r = await fetch("/api/library?project=" + encodeURIComponent(currentProject)); const items = (await r.json()).items || [];
+                const pts = items.filter(i => i.gen_seconds > 3 && i.length && i.width && i.height && i.mode !== "timeline")
+                    .map(i => [Math.log(i.width * i.height * i.length), Math.log(Math.max(3, i.gen_seconds - 20))]);
+                if (pts.length >= 4) {
+                    let n = pts.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
+                    for (const [x, y] of pts) { sx += x; sy += y; sxx += x * x; sxy += x * y; }
+                    const den = n * sxx - sx * sx;
+                    if (den > 1e-9) {
+                        const p = (n * sxy - sx * sy) / den; fitP = Math.min(2.4, Math.max(1.0, p));
+                        const as = pts.map(([lx, ly]) => Math.exp(ly) / Math.pow(Math.exp(lx), fitP)).sort((a, b) => a - b);
+                        fitA = as[Math.floor(as.length / 2)]; updateEta();
+                    }
+                }
+                if ($("libcount")) $("libcount").textContent = (currentProject === '__master__' ? '🗂 Master · ' : '📁 ' + currentProject + ' · ') + items.length + " videos";
+                const grid = $("grid"); if (!grid) return; grid.innerHTML = "";
+                if ($("libempty")) $("libempty").style.display = items.length ? "none" : "block";
+                for (const it of items) {
+                    const url = "/api/video?name=" + encodeURIComponent(it.filename);
+                    const el = document.createElement("div");
+                    el.className = "card group bg-neutral-950 border border-neutral-800/80 hover:border-neutral-700 rounded-3xl p-4 cursor-pointer transition-all duration-300 hover:bg-neutral-900/90 shadow-2xl flex flex-col justify-between";
+                    el.innerHTML = `
+            <div class="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800/60 flex items-center justify-center mb-3">
+              <video src="${url}" preload="metadata" controls playsinline class="w-full h-full object-contain"></video>
+            </div>
+            <div class="px-1 space-y-2">
+              <p class="text-xs font-medium text-neutral-200 line-clamp-2">${(it.prompt || "Sin prompt").slice(0, 160)}</p>
+              <div class="text-[10px] text-neutral-400 flex flex-wrap gap-2">
+                <span>${it.width}×${it.height}</span>
+                <span>${(it.length / 24).toFixed(1)}s</span>
+                <span>seed ${it.seed}</span>
+                <b class="text-blue-400">⏱ ${fmtTime(it.gen_seconds)}</b>
+              </div>
+              <div class="flex flex-wrap gap-1.5 pt-1">
+                <button class="upfast flex-1 py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">⚡VSR</button>
+                <button class="upfv flex-1 py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">✨VSR</button>
+                <button class="ext flex-1 py-1 px-2 rounded-lg bg-blue-950/60 hover:bg-blue-900/60 border border-blue-800/60 text-[10px] text-blue-300">⇢ Extender</button>
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                <button class="rife2 flex-1 py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">🌊 48fps</button>
+                <button class="rife3 flex-1 py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">🌊 72fps</button>
+              </div>
+              <button class="recreate w-full py-1.5 px-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/50 text-[10px] font-bold text-emerald-200">♻ Recrear con este setup</button>
+              <div class="flex gap-1.5">
+                <button class="creative flex-1 py-1.5 px-2 rounded-lg bg-blue-600/25 hover:bg-blue-600/45 border border-blue-500/50 text-[10px] font-bold text-blue-200">🎬 Espacio creativo</button>
+                <button class="moveproj py-1.5 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">📁 Mover</button>
+              </div>
+              <div class="flex items-center gap-1.5 pt-1">
+                <button class="cp flex-1 py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">📋 Copiar</button>
+                <a href="${url}" download="${it.filename.split('/').pop()}" class="flex-1 text-center py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-white">⬇ Bajar</a>
+                <button class="del py-1 px-2.5 rounded-lg bg-red-950/40 hover:bg-red-900/50 border border-red-900/40 text-[10px] text-red-400">🗑</button>
+              </div>
+            </div>`;
+                    el.querySelector(".cp").onclick = (ev) => {
+                        ev.stopPropagation();
+                        navigator.clipboard.writeText(it.prompt || "").then(() => {
+                            const b = el.querySelector(".cp"), t = b.textContent; b.textContent = "✓ Copiado"; setTimeout(() => b.textContent = t, 1200);
+                        }).catch(() => showError("El navegador bloqueó el portapapeles."));
+                    };
+                    el.querySelector(".upfast").onclick = (ev) => { ev.stopPropagation(); queueUpscale(it.filename, "flashfast_2x"); };
+                    el.querySelector(".upfv").onclick = (ev) => { ev.stopPropagation(); queueUpscale(it.filename, "flashvsr_2x"); };
+                    el.querySelector(".rife2").onclick = (ev) => { ev.stopPropagation(); queueInterp(it.filename, 2); };
+                    el.querySelector(".rife3").onclick = (ev) => { ev.stopPropagation(); queueInterp(it.filename, 3); };
+                    el.querySelector(".ext").onclick = (ev) => { ev.stopPropagation(); startExtend(it); };
+                    el.querySelector(".creative").onclick = (ev) => { ev.stopPropagation(); openCreative(it); };
+                    el.querySelector(".recreate").onclick = (ev) => { ev.stopPropagation(); applySetup(it); };
+                    el.querySelector(".moveproj").onclick = (ev) => { ev.stopPropagation(); moveToProject(it); };
+                    el.querySelector(".del").onclick = async (ev) => {
+                        ev.stopPropagation();
+                        if (!confirm("¿Eliminar este video?")) return;
+                        await fetch("/api/library?id=" + it.id, { method: "DELETE" }); loadLibrary();
+                    };
+                    grid.appendChild(el);
+                }
+            } catch (e) { }
+        }
+
+        // Repuebla el compositor con el setup exacto de un video (Recrear con este setup).
+        function setChipUI(boxId, attr, val) {
+            const box = $(boxId); if (!box) return;
+            [...box.children].forEach(x => x.classList.toggle("on", x.dataset[attr] === String(val)));
+        }
+        function applySetup(it) {
+            let s = {};
+            try { s = it.settings ? (typeof it.settings === "string" ? JSON.parse(it.settings) : it.settings) : {}; } catch (e) { s = {}; }
+            if ($("prompt")) $("prompt").value = it.prompt || "";
+            // resolución
+            const w = it.width, h = it.height;
+            aspect = (s.aspect && RES[s.aspect]) ? s.aspect : (w > h ? "16:9" : (w < h ? "9:16" : "1:1"));
+            if ($("aspect")) [...$("aspect").children].forEach(x => x.classList.toggle("on", x.dataset.a === aspect));
+            let idx = RES[aspect].findIndex(r => r[0] === w && r[1] === h);
+            if (idx < 0) { RES[aspect].push([w, h, "custom"]); idx = RES[aspect].length - 1; }
+            resIdx = idx; renderRes();
+            // duración
+            const secs = Math.max(1, Math.round(s.seconds || (it.length ? it.length / 24 : 8)));
+            if ($("durMin")) $("durMin").value = Math.floor(secs / 60);
+            if ($("durSec")) $("durSec").value = secs % 60; syncDur();
+            // seed exacto (bórralo para una variación nueva)
+            if ($("seed")) $("seed").value = (it.seed != null ? it.seed : "");
+            // aceleradores (si el video los guardó)
+            if (s.turbo != null) { turbo = s.turbo; setChipUI("turbobox", "t", turbo); }
+            if (s.turbo_lora != null) { turboLora = s.turbo_lora ? "on" : "off"; setChipUI("turboloraBox", "tl", turboLora); }
+            if (s.spectrum != null) { spectrum = s.spectrum ? "on" : "off"; setChipUI("spectrumBox", "sp", spectrum); }
+            if (s.mem_factor !== undefined) { memBoost = s.mem_factor ? "on" : "off"; setChipUI("membox", "m", memBoost); }
+            if (s.steps != null) { steps = s.steps; setChipUI("stepsbox", "s", steps); }
+            if (s.upscale != null) { upscale = s.upscale; setChipUI("upscalebox", "u", upscale); }
+            updateEta();
+            if ($("prompt")) { $("prompt").scrollIntoView({ behavior: "smooth", block: "center" }); $("prompt").focus(); }
+            toast(s.turbo != null ? "♻ Setup cargado — dale a Generar" : "♻ Setup cargado (video antiguo: sin aceleradores guardados)");
+        }
+
+        // ══════════ Espacio Creativo (continuidad por segmentos) ══════════
+        let creativeClips = [], creativeActive = 0, creativePlaying = false, creativePollAbort = false, creativeBusy = false, creativeMode = false, creativeAction = 'add';
+        function projPayload() { return currentProject === '__master__' ? 'General' : currentProject; }
+        function baseName(fn) { return String(fn).split('/').pop(); }
+        function showCreative(on) {
+            const c = $("creative"); if (!c) return;
+            creativeMode = on;
+            if (on) { c.classList.remove('opacity-0', 'pointer-events-none'); c.classList.add('opacity-100', 'pointer-events-auto'); setCreativeAction('add'); }
+            else {
+                c.classList.add('opacity-0', 'pointer-events-none'); c.classList.remove('opacity-100', 'pointer-events-auto');
+                creativePlaying = false; const p = $("creativePlayer"); if (p) p.pause();
+                const goSpan = document.querySelector('#go span'); if (goSpan) goSpan.textContent = "Generar video";
+                const pr = $("prompt"); if (pr) pr.placeholder = "Plano general al atardecer: un motociclista cruza una carretera desértica hacia las montañas, luz cálida, polvo tras las ruedas. Audio: rugido del motor, viento, música suave.";
+            }
+        }
+        // El chat controla la acción: ＋ = nuevo segmento (con imagen/referencia si quieres) · ⇢ = extender el último clip con TU prompt
+        function setCreativeAction(a) {
+            creativeAction = a;
+            const goSpan = document.querySelector('#go span'); if (goSpan) goSpan.textContent = a === 'extend' ? "⇢ Extender" : "＋ Segmento";
+            const pr = $("prompt"); if (pr) {
+                pr.placeholder = a === 'extend'
+                    ? "Describe cómo continúa la escena (opcional) y pulsa Extender…"
+                    : "Nuevo segmento: describe la escena (puedes adjuntar imagen/referencia con ＋)…";
+                pr.focus();
+            }
+            highlightCreativeAction();
+        }
+        function highlightCreativeAction() {
+            const eb = $("creativeExtendBtn"), ab = $("creativeAddBtn");
+            if (eb) { eb.classList.toggle('ring-2', creativeAction === 'extend'); eb.classList.toggle('ring-blue-300', creativeAction === 'extend'); }
+            if (ab) { ab.classList.toggle('ring-2', creativeAction === 'add'); ab.classList.toggle('ring-white/60', creativeAction === 'add'); }
+        }
+        async function creativeSubmitFromChat() {
+            if (creativeBusy) { toast("Espera a que termine el actual"); return; }
+            const last = creativeClips[creativeClips.length - 1];
+            const dur = $("dur") ? Number($("dur").value) : 4;
+            if (creativeAction === 'extend') {
+                // Extender el último clip CON tu prompt (continuidad + audio) → segmento nuevo
+                const prompt = $("prompt") ? $("prompt").value.trim() : "";
+                $("prompt").value = "";
+                creativeGenerate({
+                    endpoint: "/api/extend", label: "Extendiendo con tu prompt…",
+                    payload: { source: baseName(last.filename), prompt, seconds: dur, steps, turbo, upscale, concat: false, project: projPayload() },
+                    dims: { w: last.w, h: last.h }
+                });
+                return;
+            }
+            // ＋ Nuevo segmento = video nuevo (respeta texto / imagen / referencia del chat)
+            const spec = buildGenerateSpec();
+            if (!spec) return;
+            $("prompt").value = "";
+            creativeGenerate({ endpoint: spec.endpoint, label: "Generando segmento…", payload: spec.payload, dims: { w: spec.info.w, h: spec.info.h } });
+        }
+        function clipSecs(c) { return Math.max(0.4, c.secs || 2); }
+        function creativeTotalSecs() { return creativeClips.reduce((a, c) => a + clipSecs(c), 0) || 1; }
+        function fmtClock(s) { s = Math.max(0, Math.floor(s || 0)); const m = Math.floor(s / 60); return String(m).padStart(2, '0') + ":" + String(s % 60).padStart(2, '0'); }
+        function openCreative(it) {
+            creativeClips = [{ filename: it.filename, w: it.width, h: it.height, secs: (it.length || 0) / 24, url: "/api/video?name=" + encodeURIComponent(it.filename) }];
+            creativeActive = 0; closeLibrary(); showCreative(true);
+            renderCreativeTrack(); loadCreativeClip(0);
+        }
+        if ($("creativeClose")) $("creativeClose").onclick = () => showCreative(false);
+        function loadCreativeClip(i) {
+            const c = creativeClips[i]; if (!c) return; creativeActive = i;
+            const p = $("creativePlayer"); p.src = c.url; p.load(); p.play().catch(() => { });
+            const t = $("creativeTitle"); if (t) t.textContent = (currentProject === '__master__' ? '' : currentProject + ' · ') + "Segmento " + (i + 1) + "/" + creativeClips.length;
+            renderCreativeTrack();
+        }
+        function renderCreativeTrack() {
+            const t = $("creativeTrack"); if (!t) return; t.innerHTML = "";
+            const n = creativeClips.length, total = creativeTotalSecs();
+            creativeClips.forEach((c, i) => {
+                const el = document.createElement("div");
+                // clips adyacentes, ancho proporcional a su duración = una sola línea de tiempo continua
+                el.className = "relative h-full overflow-hidden cursor-pointer transition-all " + (i > 0 ? "border-l border-black/60 " : "") + (i === creativeActive ? "ring-2 ring-inset ring-white z-10" : "opacity-80 hover:opacity-100");
+                el.style.flex = clipSecs(c) + " 1 0"; el.style.minWidth = "26px";
+                el.innerHTML = `<video src="${c.url}" muted preload="metadata" class="w-full h-full object-cover bg-black pointer-events-none"></video>
+          <div class="absolute top-0.5 left-0.5 bg-black/70 text-[8px] px-1 py-px rounded text-white font-semibold">${i + 1}</div>`;
+                el.onclick = () => loadCreativeClip(i);
+                t.appendChild(el);
+            });
+            const ruler = $("cRuler");
+            if (ruler) {
+                ruler.innerHTML = ""; const step = total > 30 ? 5 : (total > 12 ? 2 : 1);
+                for (let s = 0; s <= Math.ceil(total); s += step) {
+                    const mk = document.createElement("div");
+                    mk.className = "absolute top-0"; mk.style.left = (s / total * 100) + "%";
+                    mk.innerHTML = `<span class="block w-px h-1.5 bg-neutral-700"></span><span class="block -ml-1 mt-px">${String(s).padStart(2, '0')}</span>`;
+                    ruler.appendChild(mk);
+                }
+            }
+            const hist = $("creativeHistory");
+            if (hist) {
+                hist.innerHTML = "";
+                creativeClips.forEach((c, i) => {
+                    const h = document.createElement("button");
+                    h.className = "shrink-0 w-12 h-8 rounded overflow-hidden border transition-all " + (i === creativeActive ? "border-white" : "border-white/20 opacity-70 hover:opacity-100");
+                    h.innerHTML = `<video src="${c.url}" muted preload="metadata" class="w-full h-full object-cover pointer-events-none"></video>`;
+                    h.onclick = () => loadCreativeClip(i);
+                    hist.appendChild(h);
+                });
+            }
+            if ($("creativeMeta")) $("creativeMeta").textContent = n + (n === 1 ? " clip" : " clips") + " · 1 video continuo · " + fmtClock(total);
+            highlightCreativeAction();
+        }
+        // ── Controles de video (estilo editor) ──
+        const cP = () => $("creativePlayer");
+        function setPlayIcon(playing) { const ic = $("cPlayIcon"); if (ic) ic.innerHTML = playing ? '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>' : '<path d="M8 5v14l11-7z"/>'; }
+        if ($("cPlay")) $("cPlay").onclick = () => { const p = cP(); if (p.paused) { creativePlaying = true; p.play().catch(() => { }); } else p.pause(); };
+        if ($("cPrev")) $("cPrev").onclick = () => loadCreativeClip(Math.max(0, creativeActive - 1));
+        if ($("cNext")) $("cNext").onclick = () => loadCreativeClip(Math.min(creativeClips.length - 1, creativeActive + 1));
+        if ($("cMute")) $("cMute").onclick = () => { const p = cP(); p.muted = !p.muted; const ic = $("cMuteIcon"); if (ic) ic.innerHTML = p.muted ? '<path d="M3 10v4h4l5 5V5L7 10H3z"/><path d="M16 9l4 6m0-6l-4 6" stroke="currentColor" stroke-width="1.6" fill="none"/>' : '<path d="M3 10v4h4l5 5V5L7 10H3z"/>'; };
+        if ($("cFull")) $("cFull").onclick = () => { const el = $("creativePlayer"); const fn = el.requestFullscreen || el.webkitRequestFullscreen; if (fn) fn.call(el); };
+        if ($("creativeDl")) $("creativeDl").onclick = () => { const c = creativeClips[creativeActive]; if (!c) return; const a = document.createElement('a'); a.href = c.url; a.download = baseName(c.filename); document.body.appendChild(a); a.click(); a.remove(); };
+        if ($("cZoomIn")) $("cZoomIn").onclick = () => { const t = $("creativeTrack"); if (t) { t.classList.remove('h-10', 'h-14'); t.classList.add('h-20'); } };
+        if ($("cZoomOut")) $("cZoomOut").onclick = () => { const t = $("creativeTrack"); if (t) { t.classList.remove('h-20', 'h-14'); t.classList.add('h-10'); } };
+        if ($("creativeExtendBtn")) $("creativeExtendBtn").onclick = () => { setCreativeAction('extend'); toast("⇢ Extender: escribe cómo continúa y pulsa Extender"); };
+        if ($("creativeAddBtn")) $("creativeAddBtn").onclick = () => { setCreativeAction('add'); toast("＋ Nuevo segmento: escribe (o adjunta imagen/referencia)"); };
+        if (cP()) {
+            cP().addEventListener("play", () => setPlayIcon(true));
+            cP().addEventListener("pause", () => setPlayIcon(false));
+            cP().addEventListener("ended", () => {
+                if (creativePlaying && creativeActive < creativeClips.length - 1) loadCreativeClip(creativeActive + 1);
+                else { creativePlaying = false; setPlayIcon(false); }
+            });
+            cP().addEventListener("timeupdate", () => {
+                const total = creativeTotalSecs();
+                let off = 0; for (let i = 0; i < creativeActive; i++) off += clipSecs(creativeClips[i]);
+                off += cP().currentTime || 0;
+                const ph = $("cPlayhead"), wrap = ph ? ph.parentElement : null;
+                if (ph && wrap) { ph.style.display = 'block'; ph.style.left = (off / total * wrap.clientWidth) + "px"; }
+                const cur = $("cCur"), tot = $("cTot"); if (cur) cur.textContent = fmtClock(off); if (tot) tot.textContent = fmtClock(total);
+            });
+        }
+        function creativeShowErr(m) { const e = $("creativeErr"); if (e) { e.style.display = m ? "block" : "none"; e.textContent = m; } if (m) toast(m); }
+        // Extender el último clip (continuación con audio) → segmento nuevo
+        async function creativeGenerate(spec) {
+            creativeShowErr(""); creativeBusy = true; creativePollAbort = false;
+            $("creativeProg").style.display = "flex"; $("creativeRingtxt").textContent = "0%";
+            $("creativeProgtxt").textContent = spec.label || "Generando…"; $("creativeProgeta").textContent = "";
+            try {
+                const r = await fetch(spec.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(spec.payload) });
+                const d = await r.json(); if (!r.ok) throw new Error(d.error || "No se pudo generar.");
+                creativePoll(d.prompt_id, spec.dims, d.length || 0);
+            } catch (e) { creativeBusy = false; $("creativeProg").style.display = "none"; creativeShowErr(e.message); }
+        }
+        function creativePoll(id, dims, len) {
+            const tick = async () => {
+                if (creativePollAbort) return;
+                try {
+                    const r = await fetch("/api/status?id=" + encodeURIComponent(id)); const d = await r.json();
+                    if (typeof d.pct === "number") $("creativeRingtxt").textContent = Math.round(d.pct) + "%";
+                    if (d.stage) $("creativeProgtxt").textContent = d.stage;
+                    $("creativeProgeta").textContent = (d.eta != null && d.eta > 0) ? `faltan ~${fmtTime(d.eta)}` : "";
+                    if (d.status === "done") { creativeOnDone(d.name, dims, len); return; }
+                    if (d.status === "error") { creativeBusy = false; $("creativeProg").style.display = "none"; creativeShowErr(d.error || "Falló."); return; }
+                } catch (e) { }
+                setTimeout(tick, 1000);
+            }; tick();
+        }
+        function creativeOnDone(name, dims, len) {
+            creativeBusy = false; $("creativeProg").style.display = "none";
+            creativeClips.push({ filename: name, w: dims.w, h: dims.h, secs: (len || 0) / 24, url: "/api/video?name=" + encodeURIComponent(name) });
+            loadLibrary(); loadProjects();
+            loadCreativeClip(creativeClips.length - 1);
+            toast("✓ Segmento agregado (" + creativeClips.length + ")");
+        }
+        if ($("creativeCancel")) $("creativeCancel").onclick = async () => {
+            creativePollAbort = true; creativeBusy = false;
+            try { await fetch("/api/cancel", { method: "POST" }); } catch (e) { }
+            $("creativeProg").style.display = "none";
+        };
+        // Unir todos los segmentos en un solo video largo
+        if ($("creativeJoin")) $("creativeJoin").onclick = async () => {
+            if (creativeBusy) { toast("Espera a que termine el actual"); return; }
+            if (creativeClips.length < 2) { toast("Agrega al menos 2 segmentos para unir"); return; }
+            creativeBusy = true; $("creativeProg").style.display = "flex";
+            $("creativeProgtxt").textContent = "Uniendo segmentos…"; $("creativeRingtxt").textContent = "🔗"; $("creativeProgeta").textContent = "";
+            try {
+                const clips = creativeClips.map(c => ({ name: baseName(c.filename), mute: false }));
+                const r = await fetch("/api/timeline", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clips, project: projPayload(), title: "Espacio creativo · " + creativeClips.length + " segmentos" }) });
+                const d = await r.json(); if (!r.ok) throw new Error(d.error || "No se pudo unir.");
+                creativeBusy = false; $("creativeProg").style.display = "none";
+                const p = $("creativePlayer"); p.src = "/api/video?name=" + encodeURIComponent(d.name); p.load(); p.play().catch(() => { });
+                loadLibrary(); loadProjects(); toast("✓ Video unido (" + d.seconds + "s) guardado en " + projPayload());
+            } catch (e) { creativeBusy = false; $("creativeProg").style.display = "none"; creativeShowErr(e.message); }
+        };
+
+        // Reconectar con trabajo en vuelo al refrescar la página
+        fetch("/api/active").then(r => r.json()).then(d => {
+            if (d && d.active) {
+                activeJob = { id: d.id, info: { w: d.w, h: d.h, seed: d.seed, length: d.length } };
+                pollAbort = false; paused = false;
+                if ($("pausebtn")) $("pausebtn").textContent = "⏸ Pausar";
+                setBusy(true);
+                if ($("progtxt")) $("progtxt").textContent = d.stage || "Generando…";
+                setBar(d.pct || 0);
+                poll(d.id, activeJob.info);
+            }
+        }).catch(() => { });
+
+        // Cierre de ventanas flotantes al hacer clic afuera
+        document.addEventListener('click', (e) => {
+            if (menuOpen && !plusMenu.contains(e.target) && e.target !== plusBtn) {
+                togglePlusMenu();
+            }
+            if (projMenuOpen) {
+                const pm = $("projMenu"), pb = $("projBtn");
+                if (pm && !pm.contains(e.target) && pb && !pb.contains(e.target)) toggleProjMenu(false);
+            }
+        });
+
+        // Inicialización
+        bindFile(); renderRes(); syncDur(); updateEta(); renderProjName(); loadProjects(); loadLibrary();
+    </script>
+</body>
+
+</html>

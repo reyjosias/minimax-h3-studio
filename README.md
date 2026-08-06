@@ -90,6 +90,20 @@ rife_v4.26.safetensors                             # frame interpolation (option
 
 ---
 
+## 🤖 New to ComfyUI? Let an AI set it up for you
+
+The trickiest part isn't this app — it's installing **ComfyUI** and downloading the **MiniMax H3** model stack correctly. You don't have to do it alone:
+
+> **Hand this whole repo to an AI assistant like [Claude](https://claude.ai) (Claude Code is ideal) and ask it to guide you** — installing ComfyUI, downloading the MiniMax H3 models (UNET, text encoder, video + audio VAEs) into the right folders, wiring the shared model paths, and getting everything ready so the Studio just works.
+
+A prompt that works well:
+
+> _"I want to run this repo (MiniMax H3 Studio). Walk me step by step: install ComfyUI, download the MiniMax H3 models listed in the README into the correct folders, install the optional accelerator custom nodes, and configure the paths in `server.py` / `launch.py` for my machine, until I can open the Studio and generate a video."_
+
+> _¿Nuevo en ComfyUI? Pásale este repo a una IA como **Claude** y pídele que te guíe paso a paso: instalar ComfyUI, descargar los modelos MiniMax H3 en las carpetas correctas, y dejar todo listo para que la app funcione._
+
+---
+
 ## 🚀 Install & run
 
 ```bash

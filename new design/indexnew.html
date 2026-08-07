@@ -546,12 +546,12 @@
                         <input type="number" id="durMin" min="0" max="2" value="0"
                             class="w-16 bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:outline-none focus:border-blue-500">
                         <span class="text-neutral-400 text-xs">min</span>
-                        <input type="number" id="durSec" min="0" max="59" value="8"
+                        <input type="number" id="durSec" min="0" max="59" value="5"
                             class="w-16 bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:outline-none focus:border-blue-500">
                         <span class="text-neutral-400 text-xs">seg</span>
-                        <span class="text-[11px] text-neutral-400 ml-1">= <b id="durTotal" class="text-blue-400">0:08</b></span>
+                        <span class="text-[11px] text-neutral-400 ml-1">= <b id="durTotal" class="text-blue-400">0:05</b></span>
                     </div>
-                    <input type="hidden" id="dur" value="8">
+                    <input type="hidden" id="dur" value="5">
                 </div>
             </div>
 
@@ -779,7 +779,7 @@
             "9:16": [[352, 640, "360p"], [480, 832, "480p"], [640, 1152, "HD ★"], [768, 1344, "768p"], [1152, 2048, "2K ⚠ nativo"], [1440, 2560, "2.5K ⚠ nativo"]],
             "1:1": [[512, 512, "512"], [640, 640, "640 ★"], [768, 768, "768p"], [1408, 1408, "2K ⚠ nativo"], [2048, 2048, "2.5K ⚠ nativo"]],
         };
-        let mode = "t2v", aspect = "16:9", resIdx = 3, resW = 1344, resH = 768, steps = 20, turbo = "cache", upscale = "off", model = "int8", memBoost = "on", firstImage = null, lastImage = null, extending = null;
+        let mode = "t2v", aspect = "16:9", resIdx = 2, resW = 1152, resH = 640, steps = 20, turbo = "cache", upscale = "off", model = "int8", memBoost = "on", firstImage = null, lastImage = null, extending = null;
         const MEM_FACTOR_EST = 0.85;
         let currentProject = localStorage.getItem('lai_project') || 'General';
         let projects = [];

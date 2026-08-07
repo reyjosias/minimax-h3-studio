@@ -1455,7 +1455,10 @@
                         // Píldora inferior (sirve también cuando genera "de fondo")
                         const pctTxt = (typeof d.pct === "number") ? ` ${Math.round(d.pct)}%` : "";
                         const etaTxt = (d.eta != null && d.eta > 0) ? ` · faltan ~${fmtTime(d.eta)}` : "";
-                        setGenPill(`⏳ Generando video…${pctTxt}${etaTxt}` + (queue.length ? ` · +${queue.length} en cola` : ""), true);
+                        const kind = info.audioOnly ? "audio" : info.imageOnly ? "imagen" : "video";
+                        const kico = info.audioOnly ? "🎧" : info.imageOnly ? "🖼" : "⏳";
+                        setGenPill(`${kico} Generando ${kind}…${pctTxt}${etaTxt}` + (queue.length ? ` · +${queue.length} en cola` : ""), true);
+                        if ($("progtxt") && (info.audioOnly || info.imageOnly) && d.stage) $("progtxt").textContent = `Generando ${kind}…`;
                         if (d.status === "done") { onDone(d.name, d.gen_seconds, info); return; }
                         if (d.status === "error") { activeJob = null; if (!bgMode) { setBusy(false); if ($("empty") && !window._lastResult) $("empty").style.display = "flex"; } if (!queue.length) setGenPill("", false); showError(d.error || "Falló la generación."); nextJob(); return; }
                     }
@@ -1614,7 +1617,7 @@
             const sv = $("seed") ? $("seed").value.trim() : "";
             const p = {
                 mode: "t2v", prompt, width: resW, height: resH, seconds: 1,
-                steps, turbo: "off", turbo_lora: turboLora === "on", image_only: true,
+                steps: 30, turbo: "off", turbo_lora: false, image_only: true,  // máxima calidad siempre
                 seed: sv === "" ? null : Number(sv),
                 project: currentProject === '__master__' ? 'General' : currentProject
             };
@@ -1744,7 +1747,7 @@
         async function loadLibrary() {
             try {
                 const r = await fetch("/api/library?project=" + encodeURIComponent(currentProject)); const items = (await r.json()).items || [];
-                const pts = items.filter(i => i.gen_seconds > 3 && i.length && i.width && i.height && i.mode !== "timeline")
+                const pts = items.filter(i => i.gen_seconds > 3 && i.length && i.width && i.height && i.mode !== "timeline" && i.mode !== "audio_only" && i.mode !== "image_only")
                     .map(i => [Math.log(i.width * i.height * i.length), Math.log(Math.max(3, i.gen_seconds - 20))]);
                 if (pts.length >= 4) {
                     let n = pts.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
@@ -1761,11 +1764,20 @@
                 if ($("libempty")) $("libempty").style.display = items.length ? "none" : "block";
                 for (const it of items) {
                     const url = "/api/video?name=" + encodeURIComponent(it.filename);
+                    const isAud = it.mode === "audio_only", isImg = it.mode === "image_only";
+                    const base = it.filename.split('/').pop();
+                    const dlUrl = isAud ? ("/api/audio?name=" + encodeURIComponent(it.filename)) : isImg ? ("/api/frame?name=" + encodeURIComponent(it.filename)) : url;
+                    const dlName = isAud ? base.replace(/\.mp4$/, "") + ".mp3" : isImg ? base.replace(/\.mp4$/, "") + ".jpg" : base;
+                    const media = isAud
+                        ? `<div class="flex flex-col items-center gap-2 p-4"><div class="text-3xl">🎧</div><audio src="${dlUrl}" controls class="w-full"></audio></div>`
+                        : isImg
+                            ? `<img src="${dlUrl}" loading="lazy" class="w-full h-full object-contain">`
+                            : `<video src="${url}" preload="metadata" controls playsinline class="w-full h-full object-contain"></video>`;
                     const el = document.createElement("div");
                     el.className = "card group bg-neutral-950 border border-neutral-800/80 hover:border-neutral-700 rounded-3xl p-4 cursor-pointer transition-all duration-300 hover:bg-neutral-900/90 shadow-2xl flex flex-col justify-between";
                     el.innerHTML = `
             <div class="relative w-full aspect-video rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800/60 flex items-center justify-center mb-3">
-              <video src="${url}" preload="metadata" controls playsinline class="w-full h-full object-contain"></video>
+              ${media}
             </div>
             <div class="px-1 space-y-2">
               <p class="text-xs font-medium text-neutral-200 line-clamp-2">${(it.prompt || "Sin prompt").slice(0, 160)}</p>
@@ -1791,7 +1803,7 @@
               </div>
               <div class="flex items-center gap-1.5 pt-1">
                 <button class="cp flex-1 py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">📋 Copiar</button>
-                <a href="${url}" download="${it.filename.split('/').pop()}" class="flex-1 text-center py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-white">⬇ Bajar</a>
+                <a href="${dlUrl}" download="${dlName}" class="flex-1 text-center py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-white">⬇ Bajar</a>
                 <button class="del py-1 px-2.5 rounded-lg bg-red-950/40 hover:bg-red-900/50 border border-red-900/40 text-[10px] text-red-400">🗑</button>
               </div>
             </div>`;

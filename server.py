@@ -796,7 +796,7 @@ class Handler(BaseHTTPRequestHandler):
             pid = resp.get("prompt_id")
             with LOCK:
                 JOBS[pid] = {"t0": time.time(), "recorded": False,
-                             "meta": {"mode": mode, "prompt": prompt,
+                             "meta": {"mode": ("audio_only" if audio_only else "image_only" if image_only else mode), "prompt": prompt,
                                       "width": width, "height": height, "seconds": seconds,
                                       "length": length, "seed": seed,
                                       "project": body.get("project") or "General",

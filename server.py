@@ -696,6 +696,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._video(self._qs("name"))
         if path == "/api/input":
             return self._input(self._qs("name"))
+        if path == "/api/audio":
+            return self._audio(self._qs("name"))
+        if path == "/api/frame":
+            return self._frame(self._qs("name"))
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -751,6 +755,17 @@ class Handler(BaseHTTPRequestHandler):
             length = frames_for_seconds(seconds)
             steps = max(4, min(40, int(body.get("steps") or 20)))
             turbo_lora = bool(body.get("turbo_lora"))
+            # Audio-only (prueba interna): genera a resolución mínima (imagen ~0 esfuerzo)
+            # para obtener SOLO el audio en segundos; el mp3 se extrae vía /api/audio.
+            audio_only = bool(body.get("audio_only"))
+            if audio_only:
+                width = height = 64
+            # Image-only (prueba interna): genera el MÍNIMO de frames (5) a la
+            # resolución elegida (1K/2K) → sale en segundos; nos quedamos con 1 frame
+            # como imagen (vía /api/frame). No fuerza la resolución (usa la del usuario).
+            image_only = bool(body.get("image_only"))
+            if image_only:
+                length = 5  # longitud mínima válida del nodo H3 (≡5 mod 17)
             if turbo_lora:
                 steps = max(4, min(8, steps))  # Turbo LoRA is trained for 4-8 steps
             seed = int(body.get("seed") or uuid.uuid4().int % 2147483647)
@@ -1325,6 +1340,71 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as e:  # noqa
+            self._send(502, {"error": str(e)})
+
+    def _audio(self, name):
+        """Extract (and cache) the audio track of an output video as mp3 and serve
+        it. Used by the audio-only mode (video generated at 64x64, we keep only
+        the sound)."""
+        if not name:
+            return self._send(400, {"error": "missing name"})
+        base = os.path.basename(name)
+        src = os.path.join(OUTPUT_DIR, "video", base)
+        if not os.path.isfile(src):
+            return self._send(404, {"error": "video no encontrado"})
+        mp3 = os.path.splitext(src)[0] + ".mp3"
+        if not os.path.isfile(mp3):
+            try:
+                subprocess.run([FFMPEG, "-y", "-i", src, "-vn", "-q:a", "2", mp3],
+                               capture_output=True, timeout=60)
+            except Exception as e:  # noqa
+                return self._send(502, {"error": "ffmpeg: " + str(e)})
+        if not os.path.isfile(mp3):
+            return self._send(502, {"error": "no se pudo extraer audio"})
+        try:
+            with open(mp3, "rb") as f:
+                data = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/mpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Content-Disposition", f'inline; filename="{os.path.splitext(base)[0]}.mp3"')
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as e:  # noqa
+            self._send(502, {"error": str(e)})
+
+    def _frame(self, name):
+        """Extract (and cache) the first frame of an output video as a JPG and
+        serve it. Used by image-only mode (5-frame render, we keep one frame)."""
+        if not name:
+            return self._send(400, {"error": "missing name"})
+        base = os.path.basename(name)
+        src = os.path.join(OUTPUT_DIR, "video", base)
+        if not os.path.isfile(src):
+            return self._send(404, {"error": "video no encontrado"})
+        jpg = os.path.splitext(src)[0] + "_frame.jpg"
+        if not os.path.isfile(jpg):
+            try:
+                subprocess.run([FFMPEG, "-y", "-i", src, "-vframes", "1", "-q:v", "2", jpg],
+                               capture_output=True, timeout=60)
+            except Exception as e:  # noqa
+                return self._send(502, {"error": "ffmpeg: " + str(e)})
+        if not os.path.isfile(jpg):
+            return self._send(502, {"error": "no se pudo extraer el frame"})
+        try:
+            with open(jpg, "rb") as f:
+                data = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Content-Disposition", f'inline; filename="{os.path.splitext(base)[0]}.jpg"')
             self.end_headers()
             self.wfile.write(data)
         except (BrokenPipeError, ConnectionResetError):

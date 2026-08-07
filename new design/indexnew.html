@@ -264,6 +264,12 @@
 
                 <!-- Reproductor de Video HD Pantalla Completa del Stage -->
                 <video id="player" class="w-full h-full object-contain bg-black hidden" controls playsinline></video>
+                <div id="audioWrap" class="hidden w-full flex flex-col items-center justify-center gap-3 p-8">
+                    <div class="text-5xl">🎧</div>
+                    <div class="text-neutral-300 text-sm font-semibold">Audio generado</div>
+                    <audio id="audioPlayer" controls class="w-full max-w-md"></audio>
+                </div>
+                <img id="imageResult" class="hidden w-full h-full object-contain bg-black" alt="Imagen generada">
 
                 <!-- Overlay de Progreso de Generación -->
                 <div id="prog"
@@ -760,6 +766,14 @@
                             d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                 </button>
+
+                <!-- Botón Solo Audio (prueba interna): genera solo el mp3, rápido -->
+                <button id="audioOnlyBtn" type="button" title="Solo audio (rápido) — genera solo el mp3"
+                    class="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 hover:bg-emerald-700 text-neutral-300 hover:text-white transition-all shrink-0 text-lg">🎧</button>
+
+                <!-- Botón Solo Imagen (prueba interna): 1 frame a la resolución elegida, en segundos -->
+                <button id="imageOnlyBtn" type="button" title="Solo imagen (1 frame, rápido) — a la resolución elegida (1K/2K)"
+                    class="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 hover:bg-indigo-700 text-neutral-300 hover:text-white transition-all shrink-0 text-lg">🖼</button>
 
                 <!-- Botón de enviar / Generar video -->
                 <button id="go" type="button" title="Generar video" aria-label="Generar video"
@@ -1379,6 +1393,8 @@
             if (b) {
                 if ($("empty")) $("empty").style.display = "none";
                 if ($("player")) $("player").classList.add("hidden");
+                if ($("audioWrap")) $("audioWrap").classList.add("hidden");
+                if ($("imageResult")) $("imageResult").classList.add("hidden");
                 if ($("resultbar")) $("resultbar").style.display = "none";
             }
         }
@@ -1410,7 +1426,9 @@
                     id: d.prompt_id, info: {
                         w: d.width || spec.info.w, h: d.height || spec.info.h,
                         seed: (d.seed != null ? d.seed : (spec.info.seed != null ? spec.info.seed : 0)),
-                        length: d.length || spec.info.length || 0
+                        length: d.length || spec.info.length || 0,
+                        audioOnly: !!spec.info.audioOnly,
+                        imageOnly: !!spec.info.imageOnly
                     }
                 };
                 poll(activeJob.id, activeJob.info);
@@ -1450,6 +1468,34 @@
             setBar(100); if ($("progtxt")) $("progtxt").textContent = "¡Listo!";
             setTimeout(() => {
                 activeJob = null;
+                // Solo audio: reproduce el mp3, NO el video
+                if (info && info.audioOnly) {
+                    const ap = $("audioPlayer"), aw = $("audioWrap");
+                    if (ap) { ap.src = "/api/audio?name=" + encodeURIComponent(name); ap.load(); ap.play().catch(() => { }); }
+                    if (aw) aw.classList.remove("hidden");
+                    if ($("player")) $("player").classList.add("hidden");
+                    if ($("prog")) $("prog").style.display = "none";
+                    if ($("empty")) $("empty").style.display = "none";
+                    if ($("resulttag")) $("resulttag").textContent = "🎧 Audio listo" + (gen ? ` · ⏱ ${fmtTime(gen)}` : "");
+                    if ($("dl")) { $("dl").href = "/api/audio?name=" + encodeURIComponent(name); $("dl").download = name.split("/").pop().replace(/\.mp4$/, "") + ".mp3"; }
+                    if ($("resultbar")) $("resultbar").style.display = "flex";
+                    setGenPill("", false); nextJob(); return;
+                }
+                // Solo imagen: muestra el frame (jpg), NO el video
+                if (info && info.imageOnly) {
+                    const im = $("imageResult");
+                    if (im) { im.src = "/api/frame?name=" + encodeURIComponent(name); im.classList.remove("hidden"); }
+                    if ($("player")) $("player").classList.add("hidden");
+                    if ($("audioWrap")) $("audioWrap").classList.add("hidden");
+                    if ($("prog")) $("prog").style.display = "none";
+                    if ($("empty")) $("empty").style.display = "none";
+                    if ($("resulttag")) $("resulttag").textContent = `🖼 Imagen lista · ${info.w}×${info.h}` + (gen ? ` · ⏱ ${fmtTime(gen)}` : "");
+                    if ($("dl")) { $("dl").href = "/api/frame?name=" + encodeURIComponent(name); $("dl").download = name.split("/").pop().replace(/\.mp4$/, "") + ".jpg"; }
+                    if ($("resultbar")) $("resultbar").style.display = "flex";
+                    setGenPill("", false); nextJob(); return;
+                }
+                if ($("audioWrap")) $("audioWrap").classList.add("hidden");
+                if ($("imageResult")) $("imageResult").classList.add("hidden");
                 const p = $("player");
                 if (p) {
                     p.src = "/api/video?name=" + encodeURIComponent(name);
@@ -1541,6 +1587,44 @@
             }
             return { endpoint: "/api/generate", startLabel: "Enviando…", payload: p, info: { w: resW, h: resH } };
         }
+
+        // Solo audio (prueba interna): genera a 64x64 (imagen ~0 esfuerzo) y entrega el mp3.
+        function audioOnlyGenerate() {
+            const prompt = $("prompt") ? $("prompt").value.trim() : "";
+            if (!prompt) { showError("Escribe un prompt (describe bien el audio)."); return; }
+            const sv = $("seed") ? $("seed").value.trim() : "";
+            const p = {
+                mode: "t2v", prompt, width: 64, height: 64, seconds: Number($("dur").value),
+                steps, turbo_lora: turboLora === "on", audio_only: true,
+                seed: sv === "" ? null : Number(sv),
+                project: currentProject === '__master__' ? 'General' : currentProject
+            };
+            submitJob({ endpoint: "/api/generate", startLabel: "🎧 Generando audio…", payload: p, info: { w: 64, h: 64, audioOnly: true } });
+        }
+        let lastAudioClick = 0;
+        if ($("audioOnlyBtn")) $("audioOnlyBtn").onclick = () => {
+            const now = Date.now(); if (now - lastAudioClick < 1200) return; lastAudioClick = now;
+            audioOnlyGenerate();
+        };
+        // Solo imagen (prueba interna): 1 frame a la resolución elegida (1K/2K), en segundos.
+        // Sage OFF para no crashear en alta resolución; sin audio necesario.
+        function imageOnlyGenerate() {
+            const prompt = $("prompt") ? $("prompt").value.trim() : "";
+            if (!prompt) { showError("Escribe un prompt (describe la imagen)."); return; }
+            const sv = $("seed") ? $("seed").value.trim() : "";
+            const p = {
+                mode: "t2v", prompt, width: resW, height: resH, seconds: 1,
+                steps, turbo: "off", turbo_lora: turboLora === "on", image_only: true,
+                seed: sv === "" ? null : Number(sv),
+                project: currentProject === '__master__' ? 'General' : currentProject
+            };
+            submitJob({ endpoint: "/api/generate", startLabel: "🖼 Generando imagen…", payload: p, info: { w: resW, h: resH, imageOnly: true } });
+        }
+        let lastImageClick = 0;
+        if ($("imageOnlyBtn")) $("imageOnlyBtn").onclick = () => {
+            const now = Date.now(); if (now - lastImageClick < 1200) return; lastImageClick = now;
+            imageOnlyGenerate();
+        };
 
         let lastGoClick = 0;
         if ($("go")) $("go").onclick = () => {

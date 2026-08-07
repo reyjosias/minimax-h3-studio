@@ -694,6 +694,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._projects()
         if path == "/api/video":
             return self._video(self._qs("name"))
+        if path == "/api/input":
+            return self._input(self._qs("name"))
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -1300,6 +1302,31 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Disposition", f'inline; filename="{os.path.basename(name)}"')
             self.end_headers()
             self.wfile.write(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as e:  # noqa
+            self._send(502, {"error": str(e)})
+
+    def _input(self, name):
+        """Serve an uploaded file from the ComfyUI input dir (thumbnails for
+        references, so they survive a page refresh — the UI persists the stored
+        basename and re-shows it via this route)."""
+        if not name:
+            return self._send(400, {"error": "missing name"})
+        path = os.path.join(INPUT_DIR, os.path.basename(name))
+        if not os.path.isfile(path):
+            return self._send(404, {"error": "input no encontrado"})
+        import mimetypes
+        ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(data)
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception as e:  # noqa

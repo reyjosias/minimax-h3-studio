@@ -727,6 +727,14 @@
                     class="absolute -top-3.5 right-14 bg-neutral-900 border border-blue-500 text-blue-400 font-bold text-[10px] px-3 py-0.5 rounded-full shadow-lg"
                     style="display:none"></span>
 
+                <!-- Botón New: chat nuevo (reset) -->
+                <button id="newChatBtn" type="button" title="Nuevo chat (limpiar prompt y referencias)" aria-label="Nuevo chat"
+                    class="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-neutral-300 hover:text-white transition-all duration-200 shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M19.4 9A8 8 0 006 5.3M4.6 15A8 8 0 0018 18.7" />
+                    </svg>
+                </button>
+
                 <!-- Botón + Requerido -->
                 <button id="plusBtn" type="button" aria-label="Agregar o menú"
                     class="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-neutral-200 hover:text-white transition-all duration-200 shrink-0">
@@ -785,6 +793,9 @@
         let projects = [];
         let projMenuOpen = false;
         let refImages = [], refVideo = null, refVideoAudio = true, refAudios = [];
+        let firstImageDisabled = false, lastImageDisabled = false;  // adjuntos apagados (se ven oscuros, no se envían)
+        // URL de miniatura que SOBREVIVE al refresh (sirve el archivo del input dir, no un blob temporal)
+        function inputUrl(n) { return "/api/input?name=" + encodeURIComponent(n); }
         const TURBO_FACTOR = { off: 1, sage: 0.78, cache: 0.42 };
         let fitA = 3.1e-11, fitP = 1.5;
 
@@ -948,15 +959,15 @@
         if ($("ffirst")) $("ffirst").onchange = async e => {
             const f = e.target.files[0]; e.target.value = ""; if (!f) return; showError("");
             try {
-                const n = await uploadInput(f); firstImage = n; window._firstImageUrl = URL.createObjectURL(f);
-                if (mode === "t2v") setMode("i2v"); renderAttachBar();
+                const n = await uploadInput(f); firstImage = n; firstImageDisabled = false; window._firstImageUrl = inputUrl(n);
+                if (mode === "t2v") setMode("i2v"); renderAttachBar(); saveComposer();
             } catch (err) { showError(err.message); }
         };
         if ($("flast")) $("flast").onchange = async e => {
             const f = e.target.files[0]; e.target.value = ""; if (!f) return; showError("");
             try {
-                const n = await uploadInput(f); lastImage = n; window._lastImageUrl = URL.createObjectURL(f);
-                if (mode === "t2v") setMode("i2v"); renderAttachBar();
+                const n = await uploadInput(f); lastImage = n; lastImageDisabled = false; window._lastImageUrl = inputUrl(n);
+                if (mode === "t2v") setMode("i2v"); renderAttachBar(); saveComposer();
             } catch (err) { showError(err.message); }
         };
 
@@ -964,7 +975,7 @@
             const fs = [...e.target.files]; e.target.value = ""; showError("");
             for (const f of fs) {
                 if (refImages.length >= 3) { showError("Máximo 3 imágenes de referencia."); break; }
-                try { const n = await uploadInput(f); refImages.push({ name: n, url: URL.createObjectURL(f) }); } catch (err) { showError(err.message); }
+                try { const n = await uploadInput(f); refImages.push({ name: n, url: inputUrl(n), disabled: false }); } catch (err) { showError(err.message); }
             }
             setMode("ref");
             renderRefs();
@@ -1010,7 +1021,7 @@
         };
         if ($("voClose")) $("voClose").onclick = hideVideoOptions;
         if ($("voRef")) $("voRef").onclick = () => {
-            refVideo = { name: pendingVideo.inputName, label: pendingVideo.label };
+            refVideo = { name: pendingVideo.inputName, label: pendingVideo.label, disabled: false };
             setMode("ref"); renderRefs(); hideVideoOptions();
             toast("🎞 Video añadido como referencia — escribe el prompt y Genera");
         };
@@ -1026,7 +1037,7 @@
             const fs = [...e.target.files]; e.target.value = ""; showError("");
             for (const f of fs) {
                 if (refAudios.length >= 3) { showError("Máximo 3 audios de referencia."); break; }
-                try { const n = await uploadInput(f); refAudios.push({ name: n, label: f.name }); } catch (err) { showError(err.message); }
+                try { const n = await uploadInput(f); refAudios.push({ name: n, label: f.name, disabled: false }); } catch (err) { showError(err.message); }
             }
             setMode("ref");
             renderRefs();
@@ -1043,20 +1054,23 @@
                 const imgUrl = window._firstImageUrl || "";
                 const el = document.createElement("div");
                 el.className = "flex items-center gap-2 bg-neutral-800/95 border border-blue-500/80 px-2.5 py-1 rounded-xl text-xs text-neutral-200 shadow-lg shrink-0 group";
+                el.style.opacity = firstImageDisabled ? ".4" : "1";
                 el.innerHTML = `
-          ${imgUrl ? `<img src="${imgUrl}" class="w-8 h-8 object-cover rounded-lg">` : `<span class="text-base">🖼</span>`}
+          ${imgUrl ? `<img src="${imgUrl}" class="w-8 h-8 object-cover rounded-lg"${firstImageDisabled ? ' style="filter:grayscale(1)"' : ''}>` : `<span class="text-base">🖼</span>`}
           <div class="flex flex-col">
             <span class="font-bold text-[11px] text-blue-300">Imagen Inicial</span>
-            <span class="text-[9px] text-neutral-400">Primer frame</span>
+            <span class="text-[9px] text-neutral-400">${firstImageDisabled ? 'Apagada · no se usa' : 'Primer frame'}</span>
           </div>
-          <button class="toref text-[9px] text-blue-300 hover:text-white border border-blue-500/40 rounded-md px-1.5 py-0.5 ml-1" title="Usar como referencia">🔗 Ref</button>
+          <button class="dis text-xs ml-1 ${firstImageDisabled ? 'text-neutral-500' : 'text-emerald-400'}" title="${firstImageDisabled ? 'Activar' : 'Desactivar sin quitar'}">${firstImageDisabled ? '○' : '●'}</button>
+          <button class="toref text-[9px] text-blue-300 hover:text-white border border-blue-500/40 rounded-md px-1.5 py-0.5 ml-0.5" title="Usar como referencia">🔗 Ref</button>
           <button class="rm text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs" title="Quitar imagen inicial">✕</button>
         `;
                 el.querySelector(".rm").onclick = () => { resetDrop(); };
+                el.querySelector(".dis").onclick = () => { firstImageDisabled = !firstImageDisabled; renderAttachBar(); saveComposer(); };
                 el.querySelector(".toref").onclick = () => {
                     if (refImages.length >= 3) { showError("Máximo 3 imágenes de referencia."); return; }
-                    refImages.push({ name: firstImage, url: window._firstImageUrl || "" });
-                    firstImage = null; window._firstImageUrl = null;
+                    refImages.push({ name: firstImage, url: window._firstImageUrl || inputUrl(firstImage), disabled: firstImageDisabled });
+                    firstImage = null; firstImageDisabled = false; window._firstImageUrl = null;
                     const d = $("drop"); if (d) { d.classList.remove("has"); d.innerHTML = ""; }
                     setMode("ref"); renderRefs();
                     toast("🔗 Ahora es imagen de referencia");
@@ -1070,15 +1084,18 @@
                 const imgUrl = window._lastImageUrl || "";
                 const el = document.createElement("div");
                 el.className = "flex items-center gap-2 bg-neutral-800/95 border border-purple-500/80 px-2.5 py-1 rounded-xl text-xs text-neutral-200 shadow-lg shrink-0 group";
+                el.style.opacity = lastImageDisabled ? ".4" : "1";
                 el.innerHTML = `
-          ${imgUrl ? `<img src="${imgUrl}" class="w-8 h-8 object-cover rounded-lg">` : `<span class="text-base">🎬</span>`}
+          ${imgUrl ? `<img src="${imgUrl}" class="w-8 h-8 object-cover rounded-lg"${lastImageDisabled ? ' style="filter:grayscale(1)"' : ''}>` : `<span class="text-base">🎬</span>`}
           <div class="flex flex-col">
             <span class="font-bold text-[11px] text-purple-300">Último Frame</span>
-            <span class="text-[9px] text-neutral-400">Frame final</span>
+            <span class="text-[9px] text-neutral-400">${lastImageDisabled ? 'Apagado · no se usa' : 'Frame final'}</span>
           </div>
-          <button title="Quitar último frame" class="text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs">✕</button>
+          <button class="dis text-xs ml-1 ${lastImageDisabled ? 'text-neutral-500' : 'text-emerald-400'}" title="${lastImageDisabled ? 'Activar' : 'Desactivar sin quitar'}">${lastImageDisabled ? '○' : '●'}</button>
+          <button class="rm text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs" title="Quitar último frame">✕</button>
         `;
-                el.querySelector("button").onclick = () => { lastImage = null; window._lastImageUrl = null; renderAttachBar(); };
+                el.querySelector(".rm").onclick = () => { lastImage = null; lastImageDisabled = false; window._lastImageUrl = null; renderAttachBar(); saveComposer(); };
+                el.querySelector(".dis").onclick = () => { lastImageDisabled = !lastImageDisabled; renderAttachBar(); saveComposer(); };
                 bar.appendChild(el);
             }
 
@@ -1087,18 +1104,21 @@
                 count++;
                 const el = document.createElement("div");
                 el.className = "flex items-center gap-2 bg-neutral-800/95 border border-blue-500/60 px-2.5 py-1 rounded-xl text-xs text-neutral-200 shadow-lg shrink-0 group";
+                el.style.opacity = r.disabled ? ".4" : "1";
                 el.innerHTML = `
-          <img src="${r.url}" class="w-8 h-8 object-cover rounded-lg">
+          <img src="${r.url}" class="w-8 h-8 object-cover rounded-lg"${r.disabled ? ' style="filter:grayscale(1)"' : ''}>
           <div class="flex flex-col">
             <span class="font-bold text-[11px] text-white">Referencia ${i + 1}</span>
-            <span class="text-[9px] text-neutral-400">Imagen</span>
+            <span class="text-[9px] text-neutral-400">${r.disabled ? 'Apagada · no se usa' : 'Imagen'}</span>
           </div>
-          <button class="tofirst text-[9px] text-purple-300 hover:text-white border border-purple-500/40 rounded-md px-1.5 py-0.5 ml-1" title="Usar como primer frame">🎬 1er</button>
+          <button class="dis text-xs ml-1 ${r.disabled ? 'text-neutral-500' : 'text-emerald-400'}" title="${r.disabled ? 'Activar' : 'Desactivar sin quitar'}">${r.disabled ? '○' : '●'}</button>
+          <button class="tofirst text-[9px] text-purple-300 hover:text-white border border-purple-500/40 rounded-md px-1.5 py-0.5 ml-0.5" title="Usar como primer frame">🎬 1er</button>
           <button class="rm text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs" title="Quitar">✕</button>
         `;
                 el.querySelector(".rm").onclick = () => { refImages.splice(i, 1); renderRefs(); };
+                el.querySelector(".dis").onclick = () => { r.disabled = !r.disabled; renderAttachBar(); saveComposer(); };
                 el.querySelector(".tofirst").onclick = () => {
-                    firstImage = r.name; window._firstImageUrl = r.url;
+                    firstImage = r.name; firstImageDisabled = !!r.disabled; window._firstImageUrl = r.url;
                     refImages.splice(i, 1);
                     setMode("i2v"); renderAttachBar();
                     toast("🎬 Ahora es el primer frame");
@@ -1111,15 +1131,18 @@
                 count++;
                 const el = document.createElement("div");
                 el.className = "flex items-center gap-2 bg-neutral-800/95 border border-blue-500/60 px-2.5 py-1 rounded-xl text-xs text-neutral-200 shrink-0 shadow-lg";
+                el.style.opacity = refVideo.disabled ? ".4" : "1";
                 el.innerHTML = `
           <span class="text-base">🎞</span>
           <div class="flex flex-col max-w-[130px]">
             <span class="font-bold text-[11px] text-white truncate">${refVideo.label}</span>
-            <span class="text-[9px] text-blue-300">Video Ref</span>
+            <span class="text-[9px] text-blue-300">${refVideo.disabled ? 'Apagado · no se usa' : 'Video Ref'}</span>
           </div>
+          <button class="dis text-xs ml-1 ${refVideo.disabled ? 'text-neutral-500' : 'text-emerald-400'}" title="${refVideo.disabled ? 'Activar' : 'Desactivar sin quitar'}">${refVideo.disabled ? '○' : '●'}</button>
           <button class="rx text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs">✕</button>
         `;
                 el.querySelector(".rx").onclick = () => { refVideo = null; renderRefs(); };
+                el.querySelector(".dis").onclick = () => { refVideo.disabled = !refVideo.disabled; renderAttachBar(); saveComposer(); };
                 bar.appendChild(el);
             }
 
@@ -1128,19 +1151,67 @@
                 count++;
                 const el = document.createElement("div");
                 el.className = "flex items-center gap-2 bg-neutral-800/95 border border-neutral-700 px-2.5 py-1 rounded-xl text-xs text-neutral-200 shrink-0 shadow-lg";
+                el.style.opacity = r.disabled ? ".4" : "1";
                 el.innerHTML = `
           <span class="text-base">🎵</span>
           <div class="flex flex-col max-w-[130px]">
             <span class="font-bold text-[11px] text-white truncate">${r.label}</span>
-            <span class="text-[9px] text-neutral-400">Audio Ref</span>
+            <span class="text-[9px] text-neutral-400">${r.disabled ? 'Apagado · no se usa' : 'Audio Ref'}</span>
           </div>
+          <button class="dis text-xs ml-1 ${r.disabled ? 'text-neutral-500' : 'text-emerald-400'}" title="${r.disabled ? 'Activar' : 'Desactivar sin quitar'}">${r.disabled ? '○' : '●'}</button>
           <button class="rx text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs">✕</button>
         `;
                 el.querySelector(".rx").onclick = () => { refAudios.splice(i, 1); renderRefs(); };
+                el.querySelector(".dis").onclick = () => { r.disabled = !r.disabled; renderAttachBar(); saveComposer(); };
                 bar.appendChild(el);
             });
 
             bar.style.display = count > 0 ? "flex" : "none";
+            saveComposer();
+        }
+
+        // ── Persistencia del composer (sobrevive un refresh accidental) ──
+        const COMPOSER_KEY = 'lai_composer_v1';
+        function saveComposer() {
+            try {
+                localStorage.setItem(COMPOSER_KEY, JSON.stringify({
+                    prompt: $("prompt") ? $("prompt").value : "",
+                    mode,
+                    firstImage: firstImage ? { name: firstImage, disabled: firstImageDisabled } : null,
+                    lastImage: lastImage ? { name: lastImage, disabled: lastImageDisabled } : null,
+                    refImages: refImages.map(r => ({ name: r.name, disabled: !!r.disabled })),
+                    refVideo: refVideo ? { name: refVideo.name, label: refVideo.label, disabled: !!refVideo.disabled } : null,
+                    refAudios: refAudios.map(r => ({ name: r.name, label: r.label, disabled: !!r.disabled }))
+                }));
+            } catch (e) { }
+        }
+        function restoreComposer() {
+            let s; try { s = JSON.parse(localStorage.getItem(COMPOSER_KEY) || "null"); } catch (e) { s = null; }
+            if (!s) return;
+            if ($("prompt") && s.prompt) $("prompt").value = s.prompt;
+            if (s.firstImage) { firstImage = s.firstImage.name; firstImageDisabled = !!s.firstImage.disabled; window._firstImageUrl = inputUrl(firstImage); }
+            if (s.lastImage) { lastImage = s.lastImage.name; lastImageDisabled = !!s.lastImage.disabled; window._lastImageUrl = inputUrl(lastImage); }
+            refImages = (s.refImages || []).map(r => ({ name: r.name, url: inputUrl(r.name), disabled: !!r.disabled }));
+            refVideo = s.refVideo ? { name: s.refVideo.name, label: s.refVideo.label, disabled: !!s.refVideo.disabled } : null;
+            refAudios = (s.refAudios || []).map(r => ({ name: r.name, label: r.label, disabled: !!r.disabled }));
+            if (firstImage && $("drop")) {
+                const drop = $("drop"); drop.classList.add("has");
+                drop.innerHTML = `<button class="x" title="Quitar">✕</button><img src="${window._firstImageUrl}">`;
+                drop.querySelector(".x").onclick = ev => { ev.stopPropagation(); resetDrop(); };
+            }
+            if (s.mode && s.mode !== "t2v") setMode(s.mode);
+            renderRefs(); renderAttachBar();
+        }
+        // Botón New: chat nuevo (limpia todo y borra lo guardado)
+        function newChat() {
+            if ($("prompt")) $("prompt").value = "";
+            firstImage = null; firstImageDisabled = false; window._firstImageUrl = null;
+            lastImage = null; lastImageDisabled = false; window._lastImageUrl = null;
+            refImages = []; refVideo = null; refAudios = []; refVideoAudio = true; extending = null;
+            try { localStorage.removeItem(COMPOSER_KEY); } catch (e) { }
+            setMode("t2v"); resetDrop(); renderRefs(); renderAttachBar();
+            if ($("go")) { const gs = document.querySelector('#go span'); if (gs) gs.textContent = "Generar video"; }
+            toast("✨ Nuevo chat");
         }
 
         function renderRefs() {
@@ -1186,14 +1257,14 @@
                         // Video pegado → SIEMPRE referencia
                         toast("📋 Subiendo video pegado…");
                         const n = await uploadInput(file);
-                        refVideo = { name: n, label: file.name || "video pegado" };
+                        refVideo = { name: n, label: file.name || "video pegado", disabled: false };
                         setMode("ref"); renderRefs();
                         toast("✓ Video pegado como referencia");
                     } else if (isAud) {
                         // Audio pegado → SIEMPRE referencia
                         toast("📋 Subiendo audio pegado…");
                         const n = await uploadInput(file);
-                        refAudios.push({ name: n, label: file.name || "audio pegado" });
+                        refAudios.push({ name: n, label: file.name || "audio pegado", disabled: false });
                         setMode("ref"); renderRefs();
                         toast("✓ Audio pegado como referencia");
                     } else {
@@ -1201,9 +1272,9 @@
                         // desde el chip (botón 🔗 Ref).
                         toast("📋 Subiendo imagen pegada…");
                         const n = await uploadInput(file);
-                        const url = URL.createObjectURL(file);
+                        const url = inputUrl(n);
                         if (!firstImage && mode !== "ref") {
-                            firstImage = n;
+                            firstImage = n; firstImageDisabled = false;
                             window._firstImageUrl = url;
                             setMode("i2v");
                             const drop = $("drop");
@@ -1214,7 +1285,7 @@
                             }
                         } else {
                             if (refImages.length >= 3) { showError("Máximo 3 imágenes de referencia."); break; }
-                            refImages.push({ name: n, url });
+                            refImages.push({ name: n, url, disabled: false });
                             setMode("ref");
                         }
                         renderRefs();
@@ -1231,8 +1302,8 @@
             const f = e.target.files[0]; if (!f) return; showError("");
             try {
                 const r = await fetch("/api/upload", { method: "POST", body: f, headers: { "X-Filename": f.name, "X-Content-Type": f.type || "image/png" } });
-                const d = await r.json(); if (!r.ok) throw new Error(d.error || "upload falló"); firstImage = d.name;
-                const url = URL.createObjectURL(f);
+                const d = await r.json(); if (!r.ok) throw new Error(d.error || "upload falló"); firstImage = d.name; firstImageDisabled = false;
+                const url = inputUrl(d.name);
                 window._firstImageUrl = url;
                 setMode("i2v");
                 const drop = $("drop"); if (drop) {
@@ -1240,15 +1311,15 @@
                     drop.innerHTML = `<button class="x" title="Quitar">✕</button><img src="${url}">`;
                     drop.querySelector(".x").onclick = ev => { ev.stopPropagation(); resetDrop(); };
                 }
-                renderAttachBar();
+                renderAttachBar(); saveComposer();
             } catch (err) { showError(err.message); }
         }
         function bindFile() { const el = $("file"); if (el) el.onchange = onFile; }
         function resetDrop() {
-            firstImage = null; window._firstImageUrl = null; const d = $("drop"); if (!d) return; d.classList.remove("has");
+            firstImage = null; firstImageDisabled = false; window._firstImageUrl = null; const d = $("drop"); if (!d) return; d.classList.remove("has");
             d.innerHTML = `<span>Arrastra o haz clic para subir una imagen inicial</span><input type="file" id="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer">`;
             bindFile();
-            renderAttachBar();
+            renderAttachBar(); saveComposer();
         }
 
         // Extensión / Upscale
@@ -1418,14 +1489,21 @@
         function buildGenerateSpec() {
             const prompt = $("prompt") ? $("prompt").value.trim() : "";
 
+            // Solo cuentan los adjuntos ACTIVOS (los apagados/oscurecidos no se envían)
+            const hasFirst = firstImage && !firstImageDisabled;
+            const hasLast = lastImage && !lastImageDisabled;
+            const enRefImgs = refImages.filter(r => !r.disabled);
+            const enRefVid = (refVideo && !refVideo.disabled) ? refVideo : null;
+            const enRefAud = refAudios.filter(r => !r.disabled);
+
             // Auto-detectar modo si el usuario pegó/subió una imagen
-            if ((firstImage || lastImage) && mode === "t2v") {
+            if ((hasFirst || hasLast) && mode === "t2v") {
                 setMode("i2v");
-            } else if ((refImages.length || refVideo || refAudios.length) && mode === "t2v") {
+            } else if ((enRefImgs.length || enRefVid || enRefAud.length) && mode === "t2v") {
                 setMode("ref");
             }
 
-            const hasRef = refImages.length || refVideo || refAudios.length;
+            const hasRef = enRefImgs.length || enRefVid || enRefAud.length;
             if (extending) {
                 if (!extending.source) { showError("No hay video que extender."); return null; }
                 return {
@@ -1435,8 +1513,8 @@
                 };
             }
             if (mode !== "ref" && !prompt) { showError("Escribe un prompt."); return null; }
-            if (mode === "i2v" && !firstImage && !lastImage) { showError("Sube un primer o último frame, o cambia a Texto → Video."); return null; }
-            if (mode === "ref" && !hasRef) { showError("Añade al menos una referencia (imagen, video o audio)."); return null; }
+            if (mode === "i2v" && !hasFirst && !hasLast) { showError("Sube un primer o último frame (o actívalo), o cambia a Texto → Video."); return null; }
+            if (mode === "ref" && !hasRef) { showError("Añade al menos una referencia activa (imagen, video o audio)."); return null; }
             const sv = $("seed") ? $("seed").value.trim() : "";
             // Config pesada para 24 GB: activa Sage (atención con menos memoria) y no retiene
             // extra en VRAM, para intentar que quepa sin crashear (en vez de bloquearla).
@@ -1454,12 +1532,12 @@
                 mode, prompt, width: resW, height: resH, seconds: Number($("dur").value), steps, turbo: effTurbo, upscale, model, aspect,
                 mem_factor: effMemOn ? 0.5 : null, turbo_lora: turboLora === "on", spectrum: spectrum === "on", seed: sv === "" ? null : Number(sv),
                 project: currentProject === '__master__' ? 'General' : currentProject,
-                first_image: mode !== "ref" ? (firstImage || null) : null,
-                last_image: mode !== "ref" ? (lastImage || null) : null
+                first_image: mode !== "ref" ? (hasFirst ? firstImage : null) : null,
+                last_image: mode !== "ref" ? (hasLast ? lastImage : null) : null
             };
             if (mode === "ref") {
-                p.ref_images = refImages.map(r => r.name); p.ref_video = refVideo ? refVideo.name : null;
-                p.ref_video_audio = refVideoAudio; p.ref_audios = refAudios.map(r => r.name);
+                p.ref_images = enRefImgs.map(r => r.name); p.ref_video = enRefVid ? enRefVid.name : null;
+                p.ref_video_audio = refVideoAudio; p.ref_audios = enRefAud.map(r => r.name);
             }
             return { endpoint: "/api/generate", startLabel: "Enviando…", payload: p, info: { w: resW, h: resH } };
         }
@@ -1904,7 +1982,10 @@
         });
 
         // Inicialización
+        if ($("newChatBtn")) $("newChatBtn").onclick = () => newChat();
+        if ($("prompt")) $("prompt").addEventListener("input", () => saveComposer());
         bindFile(); renderRes(); syncDur(); updateEta(); renderProjName(); loadProjects(); loadLibrary();
+        restoreComposer();  // recupera prompt + referencias si refrescaste la página
     </script>
 </body>
 

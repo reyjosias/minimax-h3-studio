@@ -1,6 +1,15 @@
 @echo off
-title MiniMax H3 Studio
+title Local AI Studio
 cd /d "%~dp0"
-REM One click: starts ComfyUI (if needed) + Studio, then opens the browser.
-"C:\Users\Rey\ComfyUI-Installs\Rey (1)\ComfyUI\.venv\Scripts\python.exe" launch.py
+if not exist "studio_config.json" (
+  echo Configuracion inicial necesaria...
+  call setup.bat
+  if errorlevel 1 exit /b 1
+)
+where py >nul 2>&1
+if errorlevel 1 (
+  python launch.py
+) else (
+  py -3 launch.py
+)
 pause

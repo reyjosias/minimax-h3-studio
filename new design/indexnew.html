@@ -174,6 +174,24 @@
         .drop .x:hover {
             background: #ef4444;
         }
+
+        /* El compositor es fijo: el resultado y el stage reservan siempre su
+           altura real para que ninguna barra quede detrás del chat. */
+        :root { --composer-clearance: 148px; }
+        #resultbar { bottom: auto !important; }
+        #appMain { padding-bottom: var(--composer-clearance); }
+
+        /* Barra superior del chat: controles repartidos por todo el ancho. */
+        #quickBar { display: grid; grid-template-columns: auto minmax(250px, 1fr) auto; width: 100%; align-items: center; gap: 8px; }
+        #quickControls, #quickEnd { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+        #quickAspects { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); align-items: end; gap: 2px; min-width: 0; padding: 2px 4px; border-left: 1px solid #262626; border-right: 1px solid #262626; }
+        #quickAspects button { min-width: 0; }
+        @media (max-width: 900px) {
+            #quickBar { grid-template-columns: 1fr; gap: 5px; }
+            #quickControls, #quickEnd { flex-wrap: wrap; }
+            #quickEnd { justify-content: space-between; }
+            #quickAspects { order: 3; }
+        }
     </style>
 </head>
 
@@ -241,7 +259,7 @@
     </div>
 
     <!-- Contenido Principal: Reproductor Espacial Flotante de Gran Tamaño -->
-    <main class="flex-1 flex flex-col justify-center items-center px-4 md:px-8 py-2 relative z-10 w-full">
+    <main id="appMain" class="flex-1 flex flex-col justify-center items-center px-4 md:px-8 py-2 relative z-10 w-full">
 
         <!-- Contenedor Principal del Reproductor Gigante en el Aire -->
         <div class="relative w-full max-w-6xl md:max-w-7xl flex flex-col items-center">
@@ -268,8 +286,33 @@
                     <div class="text-5xl">🎧</div>
                     <div class="text-neutral-300 text-sm font-semibold">Audio generado</div>
                     <audio id="audioPlayer" controls class="w-full max-w-md"></audio>
+                    <div id="audioEditor" class="w-full max-w-2xl rounded-2xl border border-neutral-800 bg-neutral-950/90 p-3 space-y-2">
+                        <div class="flex items-center justify-between text-[10px] text-neutral-400">
+                            <span>Editor de audio · arrastra sobre la onda para seleccionar</span>
+                            <span id="audioSelectionLabel">Sin selección</span>
+                        </div>
+                        <canvas id="audioWave" width="900" height="100" class="w-full h-[82px] rounded-xl bg-black cursor-crosshair"></canvas>
+                        <div class="flex justify-end">
+                            <button id="editAudioSelectionBtn" class="px-3 py-1.5 rounded-lg bg-cyan-600/25 hover:bg-cyan-600/45 border border-cyan-500/50 text-[10px] font-bold text-cyan-100">✦ Editar selección</button>
+                        </div>
+                    </div>
                 </div>
-                <img id="imageResult" class="hidden w-full h-full object-contain bg-black" alt="Imagen generada">
+                <!-- Estudio de imagen: visor grande + historial de variantes/ediciones -->
+                <div id="imageStudio" class="hidden w-full h-full min-h-0 bg-black">
+                    <div class="relative flex-1 min-w-0 h-full flex items-center justify-center overflow-hidden">
+                        <img id="imageResult" class="max-w-full max-h-full object-contain bg-black" alt="Imagen generada">
+                        <div id="imageSetBadge" class="absolute left-3 top-3 rounded-lg border border-neutral-700 bg-black/75 px-2 py-1 text-[10px] font-semibold text-neutral-200 backdrop-blur">Imagen</div>
+                        <button id="imageFullscreenBtn" type="button" title="Ver imagen en pantalla completa"
+                            class="absolute right-3 top-3 rounded-lg border border-neutral-700 bg-black/75 px-2.5 py-1.5 text-[10px] font-semibold text-white hover:border-neutral-500">⛶ Ver grande</button>
+                    </div>
+                    <aside class="w-[150px] md:w-[190px] h-full shrink-0 border-l border-neutral-800 bg-neutral-950/95 p-2.5 flex flex-col gap-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-300">Ediciones</span>
+                            <span id="imageHistoryCount" class="text-[9px] text-neutral-500">0</span>
+                        </div>
+                        <div id="imageHistoryList" class="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5"></div>
+                    </aside>
+                </div>
 
                 <!-- Overlay de Progreso de Generación -->
                 <div id="prog"
@@ -298,7 +341,7 @@
 
             <!-- Barra de Acciones de Resultado (después de generar) -->
             <div id="resultbar"
-                class="w-full mt-4 bg-neutral-900/95 border border-neutral-800 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-2xl backdrop-blur-xl"
+                class="relative z-20 mt-3 w-full bg-neutral-950/90 border border-neutral-800 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-xl backdrop-blur-xl"
                 style="display:none">
                 <div class="flex items-center gap-2">
                     <span id="resulttag"
@@ -306,6 +349,7 @@
                         LISTO</span>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
+                    <div id="videoResultActions" class="flex items-center gap-2 flex-wrap">
                     <button id="upfastbtn" title="VSR real rápido"
                         class="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-200 transition-all">⚡
                         VSR Rápido</button>
@@ -321,6 +365,28 @@
                     <button id="extbtn"
                         class="px-3.5 py-1.5 rounded-xl bg-blue-600/40 hover:bg-blue-600/60 border border-blue-500/60 text-xs font-semibold text-blue-200 transition-all">⇢
                         Extender</button>
+                    <button id="takeFrameBtn" title="Usar el frame actual del reproductor como imagen de referencia"
+                        class="px-3.5 py-1.5 rounded-xl bg-violet-600/25 hover:bg-violet-600/45 border border-violet-500/50 text-xs font-semibold text-violet-100 transition-all">▣
+                        Tomar frame</button>
+                    <button id="takeFastFrameBtn" title="Crear otra escena desde el frame actual usando la ruta rápida Image-to-Video"
+                        class="px-3.5 py-1.5 rounded-xl bg-emerald-600/25 hover:bg-emerald-600/45 border border-emerald-500/50 text-xs font-semibold text-emerald-100 transition-all">⚡
+                        Nueva escena</button>
+                    <button id="takeAudioBtn" title="Extraer solo el audio de este video como referencia"
+                        class="px-3.5 py-1.5 rounded-xl bg-amber-600/20 hover:bg-amber-600/40 border border-amber-500/50 text-xs font-semibold text-amber-100 transition-all">♫
+                        Audio similar</button>
+                    <button id="takeExactAudioBtn" title="Crear los visuales con Ref2VA y conservar la pista original limpia"
+                        class="px-3.5 py-1.5 rounded-xl bg-cyan-600/25 hover:bg-cyan-600/45 border border-cyan-500/50 text-xs font-semibold text-cyan-100 transition-all">♫
+                        Audio original limpio</button>
+                    </div>
+                    <div id="imageResultActions" class="hidden items-center gap-2 flex-wrap">
+                        <button id="imgUp2Btn" class="px-3.5 py-1.5 rounded-xl bg-violet-600/30 hover:bg-violet-600/50 border border-violet-500/50 text-xs font-semibold text-violet-100">2× Escalar imagen</button>
+                        <button id="imgUp4Btn" class="px-3.5 py-1.5 rounded-xl bg-violet-600/30 hover:bg-violet-600/50 border border-violet-500/50 text-xs font-semibold text-violet-100">4× Escalar imagen</button>
+                        <button id="imgFirstBtn" class="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-200">Primer frame</button>
+                        <button id="imgLastBtn" class="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-200">Último frame</button>
+                    </div>
+                    <button id="audioExactResultBtn" style="display:none" class="px-3.5 py-1.5 rounded-xl bg-cyan-600/25 hover:bg-cyan-600/45 border border-cyan-500/50 text-xs font-semibold text-cyan-100">♫ Audio original limpio</button>
+                    <button id="resultRefBtn" class="px-3.5 py-1.5 rounded-xl bg-violet-600/25 hover:bg-violet-600/45 border border-violet-500/50 text-xs font-semibold text-violet-100">↗ Referencia</button>
+                    <button id="resultEditBtn" class="px-3.5 py-1.5 rounded-xl bg-cyan-600/25 hover:bg-cyan-600/45 border border-cyan-500/50 text-xs font-semibold text-cyan-100">✦ Editar</button>
                     <a id="dl" download
                         class="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-white transition-all flex items-center gap-1.5">⬇
                         Descargar</a>
@@ -350,7 +416,7 @@
                     📚
                 </div>
                 <div>
-                    <h2 class="text-lg font-bold text-white tracking-wide">Biblioteca de Videos</h2>
+                    <h2 class="text-lg font-bold text-white tracking-wide">Biblioteca de Creaciones</h2>
                     <p id="libcount" class="text-xs text-neutral-400">Colección completa</p>
                 </div>
             </div>
@@ -370,7 +436,7 @@
         <main class="flex-1 w-full p-6 md:p-12 overflow-y-auto flex flex-col justify-start">
 
             <div id="libempty" class="text-center text-neutral-500 my-24 text-sm" style="display:none">Todavía no has
-                creado videos.</div>
+                creado contenido.</div>
 
             <!-- Grilla Espacial Completa de Videos -->
             <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-8 w-full">
@@ -456,7 +522,7 @@
     </div>
 
     <!-- Cuadro de Chat / Creador de Video Inferior Flotante sobre la pantalla -->
-    <footer class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[94%] max-w-4xl z-40 shrink-0 flex flex-col gap-2">
+    <footer class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[96%] max-w-7xl z-40 shrink-0 flex flex-col gap-2">
 
         <!-- Menú desplegable de Preferencias y Parámetros Estilizado Compacto y Organizado -->
         <div id="settingsPanel"
@@ -533,17 +599,25 @@
                         <button class="chip on" data-a="16:9">16:9<small>horizontal</small></button>
                         <button class="chip" data-a="9:16">9:16<small>vertical</small></button>
                         <button class="chip" data-a="1:1">1:1<small>cuadrado</small></button>
+                        <button class="chip" data-a="2.35:1">2.35:1<small>cine</small></button>
+                        <button class="chip" data-a="21:9">21:9<small>ultrawide</small></button>
+                        <button class="chip" data-a="2:1">2:1<small>panorámico</small></button>
+                        <button class="chip" data-a="4:3">4:3<small>clásico</small></button>
+                        <button class="chip" data-a="3:2">3:2<small>foto</small></button>
+                        <button class="chip" data-a="2:3">2:3<small>retrato</small></button>
+                        <button class="chip" data-a="5:4">5:4<small>foto</small></button>
+                        <button class="chip" data-a="4:5">4:5<small>social</small></button>
                     </div>
                 </div>
 
                 <!-- Calidad / Tamaño -->
-                <div class="space-y-1">
+                <div class="space-y-1 hidden">
                     <span class="text-neutral-300 font-semibold text-[11px] block">Calidad / tamaño</span>
                     <div id="resbox" class="row"></div>
                 </div>
 
                 <!-- Duración (minutos + segundos, hasta 2:30 = límite nativo del modelo) -->
-                <div class="space-y-1.5 md:col-span-2">
+                <div class="space-y-1.5 md:col-span-2 hidden">
                     <div class="flex justify-between items-center text-[11px]">
                         <span class="text-neutral-200 font-semibold">Duración <span class="text-neutral-500 font-normal">(escribe min y seg)</span></span>
                         <span class="text-[10px] text-amber-400/80">⚠ &gt;15s es experimental · nativo hasta 2:30 · mucho más lento</span>
@@ -584,7 +658,7 @@
                         <div id="turbobox" class="row">
                             <button class="chip" data-t="off">Off<small>calidad máx</small></button>
                             <button class="chip" data-t="sage">Sage<small>~25% +</small></button>
-                            <button class="chip on" data-t="cache">Sage+Cache<small>~2.4× + · auto-off en 2K/4K/largos</small></button>
+                            <button class="chip on" data-t="cache">Sage+Cache<small>~2.4× + · siempre activo</small></button>
                         </div>
                     </div>
 
@@ -598,24 +672,53 @@
                         </div>
                     </div>
 
-                    <!-- Spectrum (salta-pasos, apila sobre Turbo LoRA) -->
+                    <!-- A/B real en esta RTX 3090: 2K/2s, 233.7s -> 173.8s -->
                     <div class="space-y-1">
-                        <span class="text-neutral-400 font-medium block">⚡ Spectrum <span
-                                class="text-neutral-500">(predice y salta pasos · apila sobre Turbo LoRA · ~2× extra)</span></span>
-                        <div id="spectrumBox" class="row">
-                            <button class="chip on" data-sp="off">Off</button>
-                            <button class="chip" data-sp="on">On<small>+rápido</small></button>
+                        <span class="text-neutral-400 font-medium block">⚡ Turbo LoRA 4 pasos <span
+                                class="text-neutral-500">(medido en tu RTX 3090 · calidad aprobada)</span></span>
+                        <div id="turbo4Box" class="row">
+                            <button class="chip on" data-t4="off">Off</button>
+                            <button class="chip" data-t4="on">On<small>2K: ~26% menos</small></button>
                         </div>
                     </div>
 
-
-                    <!-- Offload -->
+                    <!-- VAE compile: exact same pixels; first run warms the compiler -->
                     <div class="space-y-1">
-                        <span class="text-neutral-400 font-medium block">🚀 Menos offload <span
-                                class="text-neutral-500">(mantiene en VRAM · ayuda en clips cortos)</span></span>
+                        <span class="text-neutral-400 font-medium block">VAE compilado <span
+                                class="text-neutral-500">(calidad identica &middot; acumulable)</span></span>
+                        <div id="compileVaeBox" class="row">
+                            <button class="chip on" data-cv="off">Off</button>
+                            <button class="chip" data-cv="on">On<small>2K: -2 a -7s tras calentar</small></button>
+                        </div>
+                    </div>
+
+                    <!-- Official MiniMax INT8 ConvRot VAE: native output, same diffusion stack -->
+                    <div class="space-y-1">
+                        <span class="text-neutral-400 font-medium block">VAE INT8 <span
+                                class="text-neutral-500">(nativo &middot; acumulable &middot; calidad aprobada)</span></span>
+                        <div id="vaeInt8Box" class="row">
+                            <button class="chip on" data-vi="off">Off</button>
+                            <button class="chip" data-vi="on">On<small>2K: -13s medidos</small></button>
+                        </div>
+                    </div>
+
+                    <!-- Conservative memory mode -->
+                    <div class="space-y-1">
+                        <span class="text-neutral-400 font-medium block">Estabilidad VRAM <span
+                                class="text-neutral-500">(más offload · ayuda si falta memoria)</span></span>
                         <div id="membox" class="row">
                             <button class="chip" data-m="off">Off</button>
-                            <button class="chip on" data-m="on">On<small>experimental</small></button>
+                            <button class="chip on" data-m="on">On<small>factor 0.5</small></button>
+                        </div>
+                    </div>
+
+                    <!-- Exact-output DynamicVRAM tuning measured on this RTX 3090 -->
+                    <div class="space-y-1">
+                        <span class="text-neutral-400 font-medium block">VRAM Max <span
+                                class="text-neutral-500">(menos offload · salida exacta)</span></span>
+                        <div id="maxVramBox" class="row">
+                            <button class="chip on" data-mv="off">Off</button>
+                            <button class="chip" data-mv="on">On<small>2K: -8s medidos</small></button>
                         </div>
                     </div>
 
@@ -646,7 +749,7 @@
 
             <!-- ETA Estimada y Errores Compactos -->
             <div id="eta"
-                class="text-neutral-300 text-[11px] bg-neutral-900/90 border border-neutral-800 px-3 py-1.5 text-center font-medium rounded-xl">
+                class="hidden text-neutral-300 text-[11px] bg-neutral-900/90 border border-neutral-800 px-3 py-1.5 text-center font-medium rounded-xl">
                 Estimado total: ≈ 3m 25s–7m 9s (el escalado se suma tras generar; el tiempo exacto aparece al empezar)
             </div>
             <div id="err" class="text-red-300 text-xs bg-red-950/70 border border-red-800/70 rounded-xl px-3 py-1.5"
@@ -688,8 +791,14 @@
             <button id="menuAddAud"
                 class="menu-item flex items-center gap-3 w-full px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800 rounded-xl transition-colors">
                 <span class="text-base">🎵</span>
-                <span>+ Audio (Referencia)</span>
+                <span>+ Audio similar (Referencia)</span>
             </button>
+            <button id="menuAddExactAud"
+                class="menu-item flex items-center gap-3 w-full px-3 py-2 text-xs text-cyan-200 hover:bg-neutral-800 rounded-xl transition-colors">
+                <span class="text-base">♫</span>
+                <span>+ Generar desde este audio <span class="text-neutral-500">(original limpio · cambiable)</span></span>
+            </button>
+            <input id="faudexact" type="file" accept="audio/*" hidden>
             <div class="h-px bg-neutral-800 my-1"></div>
             <button id="menuToggleSettings"
                 class="menu-item flex items-center gap-3 w-full px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800 rounded-xl transition-colors">
@@ -712,6 +821,8 @@
             <div class="grid grid-cols-2 gap-2">
                 <button id="voExtend" class="px-3 py-2.5 rounded-xl bg-blue-600/25 hover:bg-blue-600/45 border border-blue-500/50 text-xs font-semibold text-blue-100">⇢ Continuar / Extender</button>
                 <button id="voRef" class="px-3 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-xs font-semibold text-neutral-100">🎞 Usar como referencia</button>
+                <button id="voFastFrame" class="px-3 py-2.5 rounded-xl bg-emerald-600/25 hover:bg-emerald-600/45 border border-emerald-500/50 text-xs font-semibold text-emerald-100">⚡ Nueva escena desde frame</button>
+                <button id="voEditExact" class="px-3 py-2.5 rounded-xl bg-cyan-600/25 hover:bg-cyan-600/45 border border-cyan-500/50 text-xs font-semibold text-cyan-100">✦ Editar video con H3</button>
             </div>
             <div class="text-[11px] text-neutral-400 pt-1">🔼 Subir calidad (VSR real) <span id="voUpEta" class="text-neutral-500"></span></div>
             <div class="grid grid-cols-2 gap-2">
@@ -726,6 +837,63 @@
 
             <!-- Previsualizaciones de archivos adjuntos (Mini Cuadritos de Imágenes / Videos / Audio) -->
             <div id="attachBar" class="flex flex-wrap items-center gap-2 px-1 pt-0.5" style="display:none"></div>
+
+            <!-- Controles de uso diario: compactos y siempre a la vista -->
+            <div id="quickBar" class="px-1 text-[10px] text-neutral-400">
+                <div id="quickControls">
+                <label class="flex items-center gap-1 rounded-lg border border-neutral-800 bg-neutral-950/70 px-2 py-1">
+                    <span>Calidad</span>
+                    <select id="quickQuality" title="Calidad / resolución"
+                        class="max-w-[118px] bg-transparent text-[10px] font-semibold text-white outline-none cursor-pointer"
+                        style="color-scheme:dark"></select>
+                </label>
+
+                <div id="quickProfiles" class="flex items-center gap-1 rounded-lg border border-neutral-800 bg-neutral-950/70 px-2 py-1" title="Perfiles medidos en tu RTX 3090">
+                    <span class="mr-0.5">Perfil</span>
+                    <button type="button" data-qp="0" title="0 · Configuración predeterminada" class="w-5 h-5 rounded-full border border-neutral-700 text-[9px] font-bold text-neutral-300 hover:border-blue-400 hover:text-white">0</button>
+                    <button type="button" data-qp="1" title="1 · 2m32s · VAE INT8 + VRAM Max" class="w-5 h-5 rounded-full border border-neutral-700 text-[9px] font-bold text-neutral-300 hover:border-blue-400 hover:text-white">1</button>
+                    <button type="button" data-qp="2" title="2 · 2m40s · VAE INT8" class="w-5 h-5 rounded-full border border-neutral-700 text-[9px] font-bold text-neutral-300 hover:border-blue-400 hover:text-white">2</button>
+                    <button type="button" data-qp="3" title="3 · 2m47s · VAE Compile" class="w-5 h-5 rounded-full border border-neutral-700 text-[9px] font-bold text-neutral-300 hover:border-blue-400 hover:text-white">3</button>
+                    <button type="button" data-qp="4" title="4 · 3m07s · perfil Offload 4" class="w-5 h-5 rounded-full border border-neutral-700 text-[9px] font-bold text-neutral-300 hover:border-blue-400 hover:text-white">4</button>
+                    <button type="button" data-qp="5" title="5 · 3m34s · FirstBlock Fast + Sage" class="w-5 h-5 rounded-full border border-neutral-700 text-[9px] font-bold text-neutral-300 hover:border-blue-400 hover:text-white">5</button>
+                </div>
+
+                <label id="quickTimeControl" class="flex items-center gap-1 rounded-lg border border-neutral-800 bg-neutral-950/70 px-2 py-1">
+                    <span id="quickTimeLabel">Tiempo</span>
+                    <input id="quickMin" type="number" min="0" max="2" value="0" aria-label="Minutos"
+                        class="w-7 bg-transparent text-center font-semibold text-white outline-none"><span>m</span>
+                    <input id="quickSec" type="number" min="0" max="59" value="5" aria-label="Segundos"
+                        class="w-7 bg-transparent text-center font-semibold text-white outline-none"><span>s</span>
+                </label>
+
+                <div id="imageCaptureControls" class="hidden items-center gap-1 rounded-lg border border-neutral-800 bg-neutral-950/70 px-1.5 py-1" title="Frame que se entrega al generar una imagen">
+                    <span class="text-[9px] text-neutral-500">Frame</span>
+                    <button type="button" data-imgpos="first" class="rounded px-1 py-0.5 text-[9px] text-neutral-400 hover:text-white">Inicio</button>
+                    <button type="button" data-imgpos="middle" class="rounded px-1 py-0.5 text-[9px] text-neutral-400 hover:text-white">Medio</button>
+                    <button type="button" data-imgpos="last" class="rounded bg-blue-600/35 px-1 py-0.5 text-[9px] font-bold text-blue-100">Final</button>
+                    <span class="mx-0.5 h-3 w-px bg-neutral-700"></span>
+                    <button type="button" data-imgcount="1" class="rounded bg-violet-600/35 px-1.5 py-0.5 text-[9px] font-bold text-violet-100">1</button>
+                    <button type="button" data-imgcount="3" class="rounded px-1.5 py-0.5 text-[9px] text-neutral-400 hover:text-white">3 imágenes</button>
+                </div>
+                </div>
+
+                <div id="quickAspects" title="Relación de aspecto"></div>
+
+                <div id="quickEnd">
+                <span id="quickEta" class="rounded-lg border border-emerald-900/70 bg-emerald-950/35 px-2 py-1 font-semibold text-emerald-300">Estimado ≈ calculando</span>
+
+                <a id="audioAiHelp" href="https://chatgpt.com/g/g-6a7638f43f9881918f446c6ae9e2f73c-local-ai-studio-audio"
+                    target="_blank" rel="noopener noreferrer" title="Abrir AI Help para crear prompts de audio"
+                    class="hidden rounded-lg border border-cyan-800/80 bg-cyan-950/40 px-2 py-1 font-semibold text-cyan-200 hover:border-cyan-500 hover:bg-cyan-900/50 hover:text-white">
+                    ✦ AI Help
+                </a>
+
+                <button id="settingsToggleBtn" type="button" title="Abrir opciones avanzadas"
+                    class="rounded-lg border border-neutral-800 bg-neutral-950/70 px-2 py-1 font-semibold text-neutral-300 hover:border-neutral-600 hover:text-white">
+                    Opciones avanzadas ▾
+                </button>
+                </div>
+            </div>
 
             <div class="flex items-center gap-2.5 w-full">
                 <!-- Badge de Cola -->
@@ -756,29 +924,18 @@
                     class="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none px-2 py-1"
                     autocomplete="off" />
 
-                <!-- Botón Ajustes ⚙️ -->
-                <button id="settingsToggleBtn" type="button" title="Parámetros y Formato"
-                    class="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800/90 hover:bg-neutral-700 text-neutral-400 hover:text-white transition-all shrink-0">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                </button>
-
-                <!-- Botón Solo Audio (prueba interna): genera solo el mp3, rápido -->
-                <button id="audioOnlyBtn" type="button" title="Solo audio (rápido) — genera solo el mp3"
-                    class="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 hover:bg-emerald-700 text-neutral-300 hover:text-white transition-all shrink-0 text-lg">🎧</button>
-
-                <!-- Botón Solo Imagen (prueba interna): 1 frame a la resolución elegida, en segundos -->
-                <button id="imageOnlyBtn" type="button" title="Solo imagen (1 frame, rápido) — a la resolución elegida (1K/2K)"
-                    class="flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 hover:bg-indigo-700 text-neutral-300 hover:text-white transition-all shrink-0 text-lg">🖼</button>
+                <!-- Selector minimalista del tipo de creación -->
+                <select id="outputType" title="Qué quieres crear"
+                    class="h-10 max-w-[92px] rounded-full border border-neutral-700 bg-neutral-800 px-2 text-[11px] font-semibold text-white outline-none cursor-pointer">
+                    <option value="video" style="color:#000;background:#fff">🎬 Video</option>
+                    <option value="audio" style="color:#000;background:#fff">🎧 Audio</option>
+                    <option value="image" style="color:#000;background:#fff">🖼 Imagen</option>
+                </select>
 
                 <!-- Botón de enviar / Generar video -->
                 <button id="go" type="button" title="Generar video" aria-label="Generar video"
                     class="flex items-center justify-center px-4 h-10 rounded-full bg-neutral-100 hover:bg-white text-black font-bold text-xs active:scale-95 transition-all duration-200 shrink-0 gap-1.5 shadow-lg">
-                    <span>Generar video</span>
+                    <span id="goLabel">Generar video</span>
                     <svg class="w-4 h-4 transform rotate-90" fill="currentColor" viewBox="0 0 20 20">
                         <path
                             d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
@@ -794,24 +951,60 @@
         const fmtTime = s => { s = Math.max(0, Math.round(s || 0)); const m = Math.floor(s / 60); return (m ? m + "m " : "") + (s % 60) + "s"; };
         let toastT = null;
         function toast(m) { const t = $("toast"); if (!t) return; t.textContent = m; t.classList.remove("opacity-0", "pointer-events-none"); t.classList.add("opacity-100", "pointer-events-auto"); clearTimeout(toastT); toastT = setTimeout(() => { t.classList.remove("opacity-100", "pointer-events-auto"); t.classList.add("opacity-0", "pointer-events-none"); }, 2600); }
+        function syncComposerClearance() {
+            const foot = document.querySelector("footer"); if (!foot) return;
+            const clearance = Math.ceil(foot.getBoundingClientRect().height) + 30;
+            document.documentElement.style.setProperty("--composer-clearance", clearance + "px");
+        }
 
         // Resoluciones por formato
         const RES = {
             "16:9": [[640, 352, "360p"], [832, 480, "480p"], [1152, 640, "HD ★"], [1344, 768, "768p"], [2048, 1152, "2K ⚠ nativo"], [2560, 1440, "2.5K ⚠ nativo"]],
             "9:16": [[352, 640, "360p"], [480, 832, "480p"], [640, 1152, "HD ★"], [768, 1344, "768p"], [1152, 2048, "2K ⚠ nativo"], [1440, 2560, "2.5K ⚠ nativo"]],
             "1:1": [[512, 512, "512"], [640, 640, "640 ★"], [768, 768, "768p"], [1408, 1408, "2K ⚠ nativo"], [2048, 2048, "2.5K ⚠ nativo"]],
+            "2.35:1": [[640, 288, "cine 360"], [864, 384, "cine 480"], [1152, 512, "HD cine ★"], [1376, 608, "cine 768"], [2048, 896, "2K cine ⚠"], [2560, 1088, "2.5K cine ⚠"]],
+            "21:9": [[672, 288, "ultrawide 360"], [896, 384, "ultrawide 480"], [1120, 480, "HD ultra ★"], [1344, 576, "ultra 768"], [2016, 864, "2K ultra ⚠"], [2688, 1152, "2.5K ultra ⚠"]],
+            "2:1": [[640, 320, "360p"], [832, 416, "480p"], [1152, 576, "HD ★"], [1344, 672, "768p"], [2048, 1024, "2K ⚠"], [2560, 1280, "2.5K ⚠"]],
+            "4:3": [[640, 480, "480p"], [832, 640, "640p"], [1024, 768, "HD ★"], [1280, 960, "960p"], [2048, 1536, "2K ⚠"], [2560, 1920, "2.5K ⚠"]],
+            "3:2": [[672, 448, "480p"], [864, 576, "576p"], [1152, 768, "HD ★"], [1344, 896, "896p"], [2016, 1344, "2K ⚠"], [2592, 1728, "2.5K ⚠"]],
+            "2:3": [[448, 672, "480p"], [576, 864, "576p"], [768, 1152, "HD ★"], [896, 1344, "896p"], [1344, 2016, "2K ⚠"], [1728, 2592, "2.5K ⚠"]],
+            "5:4": [[640, 512, "512p"], [800, 640, "640p"], [960, 768, "HD ★"], [1280, 1024, "1K"], [1920, 1536, "2K ⚠"], [2560, 2048, "2.5K ⚠"]],
+            "4:5": [[512, 640, "512p"], [640, 800, "640p"], [768, 960, "HD ★"], [1024, 1280, "1K"], [1536, 1920, "2K ⚠"], [2048, 2560, "2.5K ⚠"]],
         };
-        let mode = "t2v", aspect = "16:9", resIdx = 2, resW = 1152, resH = 640, steps = 20, turbo = "cache", upscale = "off", model = "int8", memBoost = "on", firstImage = null, lastImage = null, extending = null;
+        const IMAGE_RES = {
+            "16:9": {"1k":[1152,640,"1K"], "2k":[2560,1440,"2K"], "4k":[3840,2176,"4K"]},
+            "9:16": {"1k":[640,1152,"1K"], "2k":[1440,2560,"2K"], "4k":[2176,3840,"4K"]},
+            "1:1": {"1k":[1024,1024,"1K"], "2k":[2048,2048,"2K"], "4k":[4096,4096,"4K"]},
+            "2.35:1": {"1k":[1152,512,"1K"], "2k":[2560,1088,"2K"], "4k":[3840,1632,"4K"]},
+            "21:9": {"1k":[1120,480,"1K"], "2k":[2688,1152,"2K"], "4k":[4032,1728,"4K"]},
+            "2:1": {"1k":[1152,576,"1K"], "2k":[2560,1280,"2K"], "4k":[4096,2048,"4K"]},
+            "4:3": {"1k":[1024,768,"1K"], "2k":[2048,1536,"2K"], "4k":[4096,3072,"4K"]},
+            "3:2": {"1k":[1152,768,"1K"], "2k":[2592,1728,"2K"], "4k":[4032,2688,"4K"]},
+            "2:3": {"1k":[768,1152,"1K"], "2k":[1728,2592,"2K"], "4k":[2688,4032,"4K"]},
+            "5:4": {"1k":[960,768,"1K"], "2k":[2560,2048,"2K"], "4k":[3840,3072,"4K"]},
+            "4:5": {"1k":[768,960,"1K"], "2k":[2048,2560,"2K"], "4k":[3072,3840,"4K"]},
+        };
+        const ASPECTS = [
+            ["16:9",16/9,"video"], ["9:16",9/16,"vertical"], ["1:1",1,"square"],
+            ["2.35:1",2.35,"cinema"], ["21:9",21/9,"ultra"], ["2:1",2,"wide"],
+            ["4:3",4/3,"classic"], ["3:2",3/2,"photo"], ["2:3",2/3,"portrait"],
+            ["5:4",5/4,"photo"], ["4:5",4/5,"social"]
+        ];
+        let mode = "t2v", aspect = "16:9", resIdx = 2, resW = 1152, resH = 640, steps = 20, turbo = "cache", upscale = "off", model = "int8", memBoost = "on", maxVram = "off", compileVae = "off", vaeInt8 = "off", firstBlock = "off", offloadProfile = 2, activeQuickProfile = 0, firstImage = null, lastImage = null, extending = null;
+        let outputKind = "video", imageQuality = "2k", audioQuality = 64, imageCapture = "last", imageCount = 1;
+        let imageHistory = [], activeImageEdit = null;
         const MEM_FACTOR_EST = 0.85;
         let currentProject = localStorage.getItem('lai_project') || 'General';
         let projects = [];
         let projMenuOpen = false;
-        let refImages = [], refVideo = null, refVideoAudio = true, refAudios = [];
+        let refImages = [], refVideo = null, refVideoAudio = true, refAudios = [], exactAudio = null, videoEdit = null;
         let firstImageDisabled = false, lastImageDisabled = false;  // adjuntos apagados (se ven oscuros, no se envían)
         // URL de miniatura que SOBREVIVE al refresh (sirve el archivo del input dir, no un blob temporal)
         function inputUrl(n) { return "/api/input?name=" + encodeURIComponent(n); }
         const TURBO_FACTOR = { off: 1, sage: 0.78, cache: 0.42 };
-        let fitA = 3.1e-11, fitP = 1.5;
+        const REF_WORK = 2048 * 1152 * 56;
+        const ATTN_FACTOR = { cache: 1, sage: 1.50, off: 2.0 };
+        const QUICK_PROFILE_SECONDS = { 1: 152, 2: 160, 3: 167, 4: 187, 5: 214 };
 
         // Ajustes de menú flotante
         const plusBtn = $('plusBtn');
@@ -845,9 +1038,11 @@
             if (settingsOpen) {
                 settingsPanel.classList.remove('hidden');
                 settingsPanel.classList.add('flex');
+                settingsToggleBtn.textContent = 'Opciones avanzadas ▴';
             } else {
                 settingsPanel.classList.add('hidden');
                 settingsPanel.classList.remove('flex');
+                settingsToggleBtn.textContent = 'Opciones avanzadas ▾';
             }
         }
 
@@ -865,15 +1060,132 @@
                 b.innerHTML = `${r[0]}×${r[1]}<small>${r[2]}</small>`;
                 b.onclick = () => { resIdx = i; resW = r[0]; resH = r[1]; renderRes(); updateEta(); }; box.appendChild(b);
             });
-            resW = list[resIdx][0]; resH = list[resIdx][1];
+            if (outputKind === "video") { resW = list[resIdx][0]; resH = list[resIdx][1]; }
+            renderQuickQuality();
         }
 
+        function renderQuickAspects() {
+            const box = $("quickAspects"); if (!box) return;
+            box.innerHTML = "";
+            ASPECTS.forEach(([name, ratio, hint]) => {
+                const b = document.createElement("button");
+                const wide = ratio >= 1;
+                const iw = wide ? 24 : Math.max(7, 17 * ratio);
+                const ih = wide ? Math.max(6, 17 / ratio) : 17;
+                b.type = "button"; b.dataset.qa = name; b.title = `${name} · ${hint}`;
+                b.className = `flex w-full flex-col items-center justify-end gap-0.5 rounded-md py-0.5 transition-colors ${aspect === name ? "bg-blue-600/35 text-blue-100" : "text-neutral-500 hover:bg-neutral-800 hover:text-white"}`;
+                b.innerHTML = `<span class="block rounded-[2px] border ${aspect === name ? "border-blue-300 bg-blue-400/20" : "border-neutral-500"}" style="width:${iw}px;height:${ih}px"></span><small class="text-[8px] leading-none">${name}</small>`;
+                box.appendChild(b);
+            });
+        }
+
+        function selectAspect(next) {
+            if (!RES[next] || !IMAGE_RES[next]) return;
+            aspect = next;
+            if ($("aspect")) [...$("aspect").children].forEach(x => x.classList.toggle("on", x.dataset.a === aspect));
+            if (outputKind === "image") { const r = IMAGE_RES[aspect][imageQuality]; resW = r[0]; resH = r[1]; }
+            renderRes(); renderQuickAspects(); updateEta(); saveComposer();
+        }
+
+        function renderQuickQuality() {
+            const q = $("quickQuality"); if (!q) return;
+            q.innerHTML = "";
+            const options = outputKind === "image"
+                ? Object.entries(IMAGE_RES[aspect]).map(([key, r]) => [key, `${r[2]} · ${r[0]}×${r[1]}`])
+                : outputKind === "audio"
+                    ? [["64", "Alta · 64×64"]]
+                    : RES[aspect].map((r, i) => [String(i), `${r[0]}×${r[1]} · ${r[2]}`]);
+            const selected = outputKind === "image" ? imageQuality : outputKind === "audio" ? String(audioQuality) : String(resIdx);
+            options.forEach(([value, label]) => {
+                const o = document.createElement("option");
+                o.value = value; o.textContent = label;
+                o.style.color = "#000"; o.style.backgroundColor = "#fff";
+                o.selected = value === selected; q.appendChild(o);
+            });
+        }
+        if ($("quickQuality")) $("quickQuality").onchange = e => {
+            if (outputKind === "image") {
+                imageQuality = e.target.value; const r = IMAGE_RES[aspect][imageQuality]; resW = r[0]; resH = r[1];
+            } else if (outputKind === "audio") {
+                audioQuality = +e.target.value;
+            } else {
+                resIdx = Math.max(0, Math.min(RES[aspect].length - 1, +e.target.value));
+                const r = RES[aspect][resIdx]; resW = r[0]; resH = r[1];
+            }
+            renderRes(); updateEta();
+        };
+
+        function paintImageCapture() {
+            const box = $("imageCaptureControls"); if (!box) return;
+            box.querySelectorAll("[data-imgpos]").forEach(b => {
+                const on = b.dataset.imgpos === imageCapture;
+                b.className = `rounded px-1 py-0.5 text-[9px] ${on ? "bg-blue-600/35 font-bold text-blue-100" : "text-neutral-400 hover:text-white"}`;
+            });
+            box.querySelectorAll("[data-imgcount]").forEach(b => {
+                const on = Number(b.dataset.imgcount) === imageCount;
+                b.className = `rounded px-1.5 py-0.5 text-[9px] ${on ? "bg-violet-600/35 font-bold text-violet-100" : "text-neutral-400 hover:text-white"}`;
+            });
+            if ($("quickTimeLabel") && outputKind === "image") {
+                $("quickTimeLabel").textContent = imageCount === 3 ? "3 imágenes · 0.10s" : `1 frame · ${imageCapture === "first" ? "inicio" : imageCapture === "middle" ? "medio" : "final"}`;
+            }
+        }
+        if ($("imageCaptureControls")) $("imageCaptureControls").onclick = e => {
+            const p = e.target.closest("[data-imgpos]"), c = e.target.closest("[data-imgcount]");
+            if (p) imageCapture = p.dataset.imgpos;
+            if (c) imageCount = Number(c.dataset.imgcount) === 3 ? 3 : 1;
+            paintImageCapture(); updateEta(); saveComposer();
+        };
+
+        function paintQuickProfiles() {
+            if (!$('quickProfiles')) return;
+            [...$('quickProfiles').querySelectorAll('[data-qp]')].forEach(b => {
+                const on = +b.dataset.qp === activeQuickProfile;
+                b.classList.toggle('bg-blue-500', on); b.classList.toggle('border-blue-400', on);
+                b.classList.toggle('text-white', on); b.classList.toggle('shadow-[0_0_10px_rgba(59,130,246,0.55)]', on);
+            });
+        }
+        function clearQuickProfile() {
+            activeQuickProfile = 0;
+            // Los aceleradores especiales de los perfiles 4/5 no tienen control
+            // manual visible: al personalizar avanzadas, volver a una base limpia.
+            firstBlock = "off"; offloadProfile = 2;
+            paintQuickProfiles(); updateEta();
+        }
+        function applyQuickProfile(n) {
+            n = +n; activeQuickProfile = n;
+            steps = 4; turboLora = "on"; turbo4 = "on"; spectrum = "off"; upscale = "off";
+            memBoost = "off"; maxVram = "off"; compileVae = "off"; vaeInt8 = "off";
+            firstBlock = "off"; offloadProfile = 2; turbo = "cache";
+            if (n === 0) { steps = 20; turbo4 = "off"; memBoost = "on"; }
+            if (n === 1) { vaeInt8 = "on"; maxVram = "on"; }
+            if (n === 2) { vaeInt8 = "on"; }
+            if (n === 3) { compileVae = "on"; }
+            if (n === 4) { offloadProfile = 4; }
+            if (n === 5) { turbo = "sage"; firstBlock = "fast"; }
+            setChipUI("stepsbox", "s", steps); setChipUI("turbobox", "t", turbo);
+            setChipUI("turboloraBox", "tl", turboLora); setChipUI("turbo4Box", "t4", turbo4);
+            setChipUI("membox", "m", memBoost); setChipUI("maxVramBox", "mv", maxVram);
+            setChipUI("compileVaeBox", "cv", compileVae); setChipUI("vaeInt8Box", "vi", vaeInt8);
+            setChipUI("upscalebox", "u", upscale); paintQuickProfiles(); updateEta();
+            const names = {0:"Configuración predeterminada",1:"VAE INT8 + VRAM Max",2:"VAE INT8",3:"VAE Compile",4:"Offload 4",5:"FirstBlock Fast + Sage"};
+            toast(n === 0 ? "Perfil 0 activo · configuración predeterminada" : `Perfil ${n} activo · ${names[n]} · referencia ${fmtTime(QUICK_PROFILE_SECONDS[n])}`);
+        }
+        if ($('quickProfiles')) $('quickProfiles').onclick = e => {
+            const b = e.target.closest('[data-qp]'); if (b) applyQuickProfile(b.dataset.qp);
+        };
+        if (settingsPanel) settingsPanel.addEventListener('click', e => {
+            if (e.target.closest('[data-s],[data-t],[data-tl],[data-t4],[data-m],[data-mv],[data-cv],[data-vi]')) clearQuickProfile();
+        });
+
         if ($("aspect")) $("aspect").onclick = e => {
-            const b = e.target.closest("[data-a]"); if (!b) return; aspect = b.dataset.a;
-            [...$("aspect").children].forEach(x => x.classList.toggle("on", x.dataset.a === aspect)); renderRes(); updateEta();
+            const b = e.target.closest("[data-a]"); if (b) selectAspect(b.dataset.a);
+        };
+        if ($("quickAspects")) $("quickAspects").onclick = e => {
+            const b = e.target.closest("[data-qa]"); if (b) selectAspect(b.dataset.qa);
         };
         if ($("stepsbox")) $("stepsbox").onclick = e => {
             const b = e.target.closest("[data-s]"); if (!b) return; steps = +b.dataset.s;
+            if (turbo4 === "on" && steps !== 4) { turbo4 = "off"; setChipUI("turbo4Box", "t4", turbo4); }
             [...$("stepsbox").children].forEach(x => x.classList.toggle("on", +x.dataset.s === steps)); updateEta();
         };
         if ($("turbobox")) $("turbobox").onclick = e => {
@@ -883,20 +1195,57 @@
         let turboLora = "on";
         if ($("turboloraBox")) $("turboloraBox").onclick = e => {
             const b = e.target.closest("[data-tl]"); if (!b) return; turboLora = b.dataset.tl;
+            if (turboLora === "off" && turbo4 === "on") { turbo4 = "off"; setChipUI("turbo4Box", "t4", turbo4); }
             [...$("turboloraBox").children].forEach(x => x.classList.toggle("on", x.dataset.tl === turboLora)); updateEta();
         };
-        let spectrum = "off";
-        if ($("spectrumBox")) $("spectrumBox").onclick = e => {
-            const b = e.target.closest("[data-sp]"); if (!b) return; spectrum = b.dataset.sp;
-            [...$("spectrumBox").children].forEach(x => x.classList.toggle("on", x.dataset.sp === spectrum)); updateEta();
+        let turbo4 = "off";
+        if ($("turbo4Box")) $("turbo4Box").onclick = e => {
+            const b = e.target.closest("[data-t4]"); if (!b) return; turbo4 = b.dataset.t4;
+            if (turbo4 === "on") {
+                turboLora = "on"; steps = 4;
+                setChipUI("turboloraBox", "tl", turboLora);
+                setChipUI("stepsbox", "s", steps);
+                toast("⚡ Turbo LoRA 4 pasos activo · 2K medido: 3m53s → 2m54s");
+            }
+            setChipUI("turbo4Box", "t4", turbo4);
+            updateEta();
         };
+        let spectrum = "off";
         if ($("upscalebox")) $("upscalebox").onclick = e => {
             const b = e.target.closest("[data-u]"); if (!b) return; upscale = b.dataset.u;
             [...$("upscalebox").children].forEach(x => x.classList.toggle("on", x.dataset.u === upscale)); updateEta();
         };
         if ($("membox")) $("membox").onclick = e => {
             const b = e.target.closest("[data-m]"); if (!b) return; memBoost = b.dataset.m;
+            if (memBoost === "on" && maxVram === "on") { maxVram = "off"; setChipUI("maxVramBox", "mv", maxVram); }
             [...$("membox").children].forEach(x => x.classList.toggle("on", x.dataset.m === memBoost)); updateEta();
+        };
+        if ($("maxVramBox")) $("maxVramBox").onclick = e => {
+            const b = e.target.closest("[data-mv]"); if (!b) return; maxVram = b.dataset.mv;
+            if (maxVram === "on") {
+                memBoost = "off"; setChipUI("membox", "m", memBoost);
+                toast("VRAM Max activo: factor 0.08, 2K medido 8s más rápido");
+            }
+            setChipUI("maxVramBox", "mv", maxVram); updateEta();
+        };
+        if ($("compileVaeBox")) $("compileVaeBox").onclick = e => {
+            const b = e.target.closest("[data-cv]"); if (!b) return; compileVae = b.dataset.cv;
+            if (compileVae === "on" && vaeInt8 === "on") {
+                vaeInt8 = "off"; setChipUI("vaeInt8Box", "vi", vaeInt8);
+                toast("VAE Compile activo; VAE INT8 se apago porque no pueden combinarse");
+            }
+            [...$("compileVaeBox").children].forEach(x => x.classList.toggle("on", x.dataset.cv === compileVae));
+            if (compileVae === "on") toast("VAE compilado activo: la primera forma calienta; las siguientes ahorran tiempo sin cambiar pixeles");
+            updateEta();
+        };
+        if ($("vaeInt8Box")) $("vaeInt8Box").onclick = e => {
+            const b = e.target.closest("[data-vi]"); if (!b) return; vaeInt8 = b.dataset.vi;
+            if (vaeInt8 === "on" && compileVae === "on") {
+                compileVae = "off"; setChipUI("compileVaeBox", "cv", compileVae);
+            }
+            [...$("vaeInt8Box").children].forEach(x => x.classList.toggle("on", x.dataset.vi === vaeInt8));
+            if (vaeInt8 === "on") toast("VAE INT8 activo: 2K nativo, 13s menos medidos, mismo Turbo/Sage/Cache");
+            updateEta();
         };
 
         if ($("tab-t2v")) $("tab-t2v").onclick = () => setMode("t2v");
@@ -919,11 +1268,38 @@
         function updateEta() {
             if (!$("dur") || !$("eta")) return;
             const s = Number($("dur").value); const L = frames(s);
-            const mem = (memBoost === "on" ? MEM_FACTOR_EST : 1);
-            const effSteps = (turboLora === "on") ? Math.min(steps, 8) : steps;  // Turbo LoRA corre a 4-8 pasos
-            const spec = (spectrum === "on") ? 0.55 : 1;  // Spectrum salta ~½ de los evals (medido ~2×)
-            let lo = fitA * Math.pow(resW * resH * L, fitP) * (effSteps / 20) * TURBO_FACTOR[effectiveTurbo()] * mem * spec + 20;
-            let hi = lo * 1.8 + 60;
+            const qe = $("quickEta");
+            if (outputKind === "image") {
+                const pixels = resW * resH, known = 2560 * 1440;
+                const est = 20 + 112 * Math.pow(pixels / known, 1.24);
+                if (qe) qe.textContent = `${imageCount === 3 ? "3 imágenes" : "Imagen"} ${imageQuality.toUpperCase()} · estimado ≈ ${fmtTime(est)}`;
+                $("eta").textContent = `${imageCount === 3 ? "3 imágenes del mismo render de 0.10s" : "Imagen"} · estimado ≈ ${fmtTime(est)} · calibrado con tu imagen 2560×1440 de 2m12s`;
+                return;
+            }
+            if (outputKind === "audio") {
+                const lo = 6 + s * 0.55, hi = 14 + s * 0.9;
+                if (qe) qe.textContent = `Audio · estimado ≈ ${fmtTime(lo)}–${fmtTime(hi)}`;
+                $("eta").textContent = `Audio ${audioQuality}×${audioQuality} · estimado ≈ ${fmtTime(lo)}–${fmtTime(hi)}`;
+                return;
+            }
+            const mem = (vramTooHeavy() ? 1 : (memBoost === "on" ? MEM_FACTOR_EST : 1));
+            const hasImageRef = refImages.some(r => !r.disabled);
+            const hasVideoRef = !!(refVideo && !refVideo.disabled);
+            const hasAudioRef = refAudios.some(r => !r.disabled) || !!(exactAudio && !exactAudio.disabled);
+            const hasAnyRef = hasImageRef || hasVideoRef || hasAudioRef;
+            const effSteps = hasAnyRef ? Math.max(20, steps) : (turbo4 === "on" ? 4 : ((turboLora === "on") ? Math.min(steps, 8) : steps));
+            const work = resW * resH * L;
+            let core = 131 * Math.pow(work / REF_WORK, 1.30)
+                * Math.pow(effSteps / 4, 0.55) * Math.pow(L / 56, 0.15);
+            if (L > 200) core *= Math.pow(L / 200, 1.15);
+            if (hasVideoRef) core *= 1.85;
+            else if (hasAudioRef) core *= 1.35;
+            else if (hasImageRef) core *= 1.18;
+            const accel = ATTN_FACTOR[effectiveTurbo()];
+            let lo = 43 + core * accel * mem;
+            let hi = lo * 1.20 + 25;
+            if (vaeInt8 === "on") { lo = Math.max(1, lo - 13); hi = Math.max(lo, hi - 13); }
+            if (maxVram === "on") { lo = Math.max(1, lo - 8); hi = Math.max(lo, hi - 8); }
             let up = "";
             if (upscale !== "off") {
                 const sc = upscale.includes("4x") ? 4 : 2;
@@ -932,24 +1308,44 @@
                 lo += upT; hi += upT * 1.4;
                 up = ` &nbsp;·&nbsp; <b class="text-blue-400">escalado suma ≈ +${fmtTime(upT)}</b>`;
             }
-            $("eta").innerHTML = `Estimado total: <b>≈ ${fmtTime(lo)}–${fmtTime(hi)}</b>${up} <span class="text-neutral-500">(el escalado se suma tras generar; el tiempo exacto aparece al empezar)</span>`;
+            const audioTag = exactAudio && !exactAudio.disabled ? (exactAudio.outputMode === "reference" ? "AUDIO REF + AMBIENTE" : "AUDIO ORIGINAL LIMPIO") : "";
+            const tags = [videoEdit ? "EDICIÓN VIDEO H3" : hasAnyRef ? "REF2VA 20 PASOS" : (turbo4 === "on" ? "TURBO 4" : ""), audioTag, vaeInt8 === "on" ? "VAE INT8" : "", maxVram === "on" ? "VRAM MAX" : "", compileVae === "on" ? "VAE COMPILE" : ""].filter(Boolean).join(" + ");
+            const accelTag = tags ? `<b class="text-emerald-400">${tags}</b> · ` : "";
+            $("eta").innerHTML = `${accelTag}Estimado total: <b>≈ ${fmtTime(lo)}–${fmtTime(hi)}</b>${up} <span class="text-neutral-500">(calibrado con tu RTX 3090)</span>`;
+            if (qe) {
+                if (activeQuickProfile && !hasAnyRef) {
+                    let est = 43 + (QUICK_PROFILE_SECONDS[activeQuickProfile] - 43) * Math.pow(work / REF_WORK, 1.30) * Math.pow(L / 56, 0.15);
+                    if (L > 200) est *= Math.pow(L / 200, 1.15);
+                    qe.textContent = `P${activeQuickProfile} · estimado ≈ ${fmtTime(est)}`;
+                } else {
+                    qe.textContent = `Estimado ≈ ${fmtTime(lo)}–${fmtTime(hi)}`;
+                }
+            }
         }
 
         // Duración por min+seg, tope 150s (2:30 = límite nativo del nodo H3)
-        function syncDur() {
-            let m = Math.max(0, Math.min(2, parseInt($("durMin").value) || 0));
-            let s = Math.max(0, Math.min(59, parseInt($("durSec").value) || 0));
+        function syncDur(source = "advanced") {
+            const minBox = source === "quick" ? $("quickMin") : $("durMin");
+            const secBox = source === "quick" ? $("quickSec") : $("durSec");
+            let m = Math.max(0, Math.min(2, parseInt(minBox.value) || 0));
+            let s = Math.max(0, Math.min(59, parseInt(secBox.value) || 0));
             let total = m * 60 + s;
             if (total < 2) total = 2;
             if (total > 150) { total = 150; }  // 2:30 máx real (3592 frames)
             $("dur").value = total;
             const mm = Math.floor(total / 60), ss = total % 60;
+            if ($("durMin")) $("durMin").value = mm;
+            if ($("durSec")) $("durSec").value = ss;
+            if ($("quickMin")) $("quickMin").value = mm;
+            if ($("quickSec")) $("quickSec").value = ss;
             if ($("durTotal")) $("durTotal").textContent = mm + ":" + String(ss).padStart(2, '0');
             updateEta();
         }
         if ($("durMin")) $("durMin").oninput = syncDur;
         if ($("durSec")) $("durSec").oninput = syncDur;
         if ($("durMin")) $("durMin").onblur = () => { if (parseInt($("durMin").value) > 2) { $("durMin").value = 2; $("durSec").value = 30; } syncDur(); };
+        if ($("quickMin")) $("quickMin").oninput = () => syncDur("quick");
+        if ($("quickSec")) $("quickSec").oninput = () => syncDur("quick");
         if ($("dice")) $("dice").onclick = () => { if ($("seed")) $("seed").value = Math.floor(Math.random() * 2147483647); };
         function showError(m) { const e = $("err"); if (e) { e.style.display = m ? "block" : "none"; e.textContent = m; } if (m) toast("⚠ " + m); }
 
@@ -966,6 +1362,7 @@
         if ($("menuAddImg")) $("menuAddImg").onclick = () => { togglePlusMenu(); $("fimg").click(); };
         if ($("menuAddVid")) $("menuAddVid").onclick = () => { togglePlusMenu(); $("fvid").click(); };
         if ($("menuAddAud")) $("menuAddAud").onclick = () => { togglePlusMenu(); $("faud").click(); };
+        if ($("menuAddExactAud")) $("menuAddExactAud").onclick = () => { togglePlusMenu(); $("faudexact").click(); };
         if ($("menuAddFirst")) $("menuAddFirst").onclick = () => { togglePlusMenu(); $("ffirst").click(); };
         if ($("menuAddLast")) $("menuAddLast").onclick = () => { togglePlusMenu(); $("flast").click(); };
 
@@ -1005,6 +1402,26 @@
                 v.src = URL.createObjectURL(file);
             });
         }
+        function readAudioMeta(file) {
+            return new Promise((res) => {
+                const a = document.createElement('audio'); a.preload = 'metadata';
+                a.onloadedmetadata = () => { res({ dur: a.duration || 0 }); try { URL.revokeObjectURL(a.src); } catch (e) { } };
+                a.onerror = () => res({ dur: 0 });
+                a.src = URL.createObjectURL(file);
+            });
+        }
+        function useExactAudio(name, label, duration = 0, outputMode = "original") {
+            exactAudio = { name, label: label || name, duration: Number(duration || 0), disabled: false, outputMode: outputMode === "reference" ? "reference" : "original" };
+            if (exactAudio.duration > 0) {
+                const secs = Math.max(2, Math.min(150, Math.round(exactAudio.duration)));
+                if ($("durMin")) $("durMin").value = Math.floor(secs / 60);
+                if ($("durSec")) $("durSec").value = secs % 60;
+                syncDur();
+            }
+            setOutputType("video"); setMode("ref"); renderRefs(); renderAttachBar(); saveComposer();
+            if ($("prompt")) { $("prompt").focus(); $("prompt").placeholder = "Describe los visuales que H3 debe sincronizar con este audio…"; }
+            toast("♫ Audio→Video activo · Ref2VA guía los visuales y conservará el audio original limpio");
+        }
         function curProj() { return currentProject === '__master__' ? 'General' : currentProject; }
         function showVideoOptions() {
             const m = $("videoOptions"); if (!m || !pendingVideo) return;
@@ -1036,6 +1453,7 @@
         if ($("voClose")) $("voClose").onclick = hideVideoOptions;
         if ($("voRef")) $("voRef").onclick = () => {
             refVideo = { name: pendingVideo.inputName, label: pendingVideo.label, disabled: false };
+            videoEdit = null;
             setMode("ref"); renderRefs(); hideVideoOptions();
             toast("🎞 Video añadido como referencia — escribe el prompt y Genera");
         };
@@ -1043,6 +1461,22 @@
             hideVideoOptions();
             try { toast("⏳ Importando video…"); const d = await importPendingVideo(); loadLibrary(); loadProjects(); openCreative({ filename: d.filename, width: d.width, height: d.height }); setCreativeAction('extend'); }
             catch (e) { showError(e.message); }
+        };
+        if ($("voFastFrame")) $("voFastFrame").onclick = async () => {
+            hideVideoOptions();
+            try {
+                toast("⏳ Preparando frame inicial…");
+                const d = await importPendingVideo(); loadLibrary();
+                await takeVideoFrameFast(d.filename, 0, false);
+            } catch (e) { showError(e.message); }
+        };
+        if ($("voEditExact")) $("voEditExact").onclick = async () => {
+            hideVideoOptions();
+            try {
+                toast("⏳ Preparando video y audio para Ref2VA…");
+                const d = await importPendingVideo(); loadLibrary();
+                await prepareReference(d.filename, "video", true);
+            } catch (e) { showError(e.message); }
         };
         if ($("voVsrFast")) $("voVsrFast").onclick = async () => { hideVideoOptions(); try { toast("⏳ Importando video…"); const d = await importPendingVideo(); loadLibrary(); queueUpscale(d.filename, "flashfast_2x"); } catch (e) { showError(e.message); } };
         if ($("voVsrQual")) $("voVsrQual").onclick = async () => { hideVideoOptions(); try { toast("⏳ Importando video…"); const d = await importPendingVideo(); loadLibrary(); queueUpscale(d.filename, "flashvsr_2x"); } catch (e) { showError(e.message); } };
@@ -1055,6 +1489,14 @@
             }
             setMode("ref");
             renderRefs();
+        };
+        if ($("faudexact")) $("faudexact").onchange = async e => {
+            const f = e.target.files[0]; e.target.value = ""; if (!f) return; showError("");
+            try {
+                const meta = await readAudioMeta(f);
+                const n = await uploadInput(f);
+                useExactAudio(n, f.name, meta.dur);
+            } catch (err) { showError(err.message); }
         };
 
         // Renderizar barra flotante de previsualización (Cuadritos Miniatura con Etiqueta Clara)
@@ -1148,15 +1590,33 @@
                 el.style.opacity = refVideo.disabled ? ".4" : "1";
                 el.innerHTML = `
           <span class="text-base">🎞</span>
-          <div class="flex flex-col max-w-[130px]">
+          <div class="flex flex-col max-w-[250px] gap-0.5">
             <span class="font-bold text-[11px] text-white truncate">${refVideo.label}</span>
-            <span class="text-[9px] text-blue-300">${refVideo.disabled ? 'Apagado · no se usa' : 'Video Ref'}</span>
+            <span class="text-[9px] text-blue-300">${refVideo.disabled ? 'Apagado · no se usa' : videoEdit ? '✦ Edición H3 · objeto · cámara · luz' : 'Video Ref'}</span>
+            ${videoEdit ? `<span class="flex items-center gap-1 text-[8px] text-neutral-400">
+              <span>Tramo</span><input class="editstart w-12 rounded border border-neutral-700 bg-black px-1 py-0.5 text-white" type="number" min="0" max="${videoEdit.duration || 0}" step="0.1" value="${Number(videoEdit.start || 0).toFixed(1)}">
+              <span>–</span><input class="editend w-12 rounded border border-neutral-700 bg-black px-1 py-0.5 text-white" type="number" min="0.1" max="${videoEdit.duration || 0}" step="0.1" value="${Number(videoEdit.end || videoEdit.duration || 0).toFixed(1)}"><span>s</span>
+            </span>` : ''}
           </div>
           <button class="dis text-xs ml-1 ${refVideo.disabled ? 'text-neutral-500' : 'text-emerald-400'}" title="${refVideo.disabled ? 'Activar' : 'Desactivar sin quitar'}">${refVideo.disabled ? '○' : '●'}</button>
           <button class="rx text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs">✕</button>
         `;
-                el.querySelector(".rx").onclick = () => { refVideo = null; renderRefs(); };
+                el.querySelector(".rx").onclick = () => { refVideo = null; videoEdit = null; renderRefs(); };
                 el.querySelector(".dis").onclick = () => { refVideo.disabled = !refVideo.disabled; renderAttachBar(); saveComposer(); };
+                if (videoEdit) {
+                    const updateEditRange = () => {
+                        const total = Math.max(.1, Number(videoEdit.duration || 0));
+                        let a = Math.max(0, Math.min(total - .1, Number(el.querySelector(".editstart").value || 0)));
+                        let b = Math.max(a + .1, Math.min(total, a + 149, Number(el.querySelector(".editend").value || total)));
+                        videoEdit.start = a; videoEdit.end = b;
+                        const secs = Math.max(0.1, b - a);
+                        if ($("durMin")) $("durMin").value = Math.floor(secs / 60);
+                        if ($("durSec")) $("durSec").value = Math.round((secs % 60) * 10) / 10;
+                        syncDur(); saveComposer(); updateEta();
+                    };
+                    el.querySelector(".editstart").onchange = updateEditRange;
+                    el.querySelector(".editend").onchange = updateEditRange;
+                }
                 bar.appendChild(el);
             }
 
@@ -1180,8 +1640,32 @@
                 bar.appendChild(el);
             });
 
+            if (exactAudio) {
+                count++;
+                const el = document.createElement("div");
+                el.className = "flex items-center gap-2 bg-cyan-950/90 border border-cyan-500/60 px-2.5 py-1 rounded-xl text-xs text-cyan-100 shrink-0 shadow-lg";
+                el.style.opacity = exactAudio.disabled ? ".4" : "1";
+                el.innerHTML = `
+          <span class="text-base">♫</span>
+          <div class="flex flex-col max-w-[220px] gap-0.5">
+            <span class="font-bold text-[11px] text-white truncate">${exactAudio.label}</span>
+            <span class="text-[9px] text-cyan-300">${exactAudio.disabled ? 'Apagado · no se usa' : 'Audio→Video · Ref2VA real'}</span>
+            <span class="flex gap-1 mt-0.5">
+              <button class="clean px-1.5 py-0.5 rounded-md border text-[8px] font-bold ${exactAudio.outputMode !== 'reference' ? 'bg-cyan-500 text-black border-cyan-300' : 'bg-neutral-900 text-neutral-400 border-neutral-700'}" title="H3 crea los visuales guiado por el audio; el resultado conserva solamente la pista fuente limpia">Original limpio</button>
+              <button class="creativeaudio px-1.5 py-0.5 rounded-md border text-[8px] font-bold ${exactAudio.outputMode === 'reference' ? 'bg-violet-500 text-white border-violet-300' : 'bg-neutral-900 text-neutral-400 border-neutral-700'}" title="H3 partially_copy: mantiene la pista como base y añade playa, canto, viento u otros sonidos pedidos">Referencia + ambiente</button>
+            </span>
+          </div>
+          <button class="dis text-xs ml-1 ${exactAudio.disabled ? 'text-neutral-500' : 'text-emerald-400'}" title="${exactAudio.disabled ? 'Activar' : 'Desactivar sin quitar'}">${exactAudio.disabled ? '○' : '●'}</button>
+          <button class="rx text-neutral-400 hover:text-red-400 font-bold ml-1 text-xs">✕</button>`;
+                el.querySelector(".rx").onclick = () => { exactAudio = null; renderRefs(); };
+                el.querySelector(".dis").onclick = () => { exactAudio.disabled = !exactAudio.disabled; renderAttachBar(); saveComposer(); };
+                el.querySelector(".clean").onclick = () => { exactAudio.outputMode = "original"; renderAttachBar(); saveComposer(); toast("♫ Salida: audio original limpio"); };
+                el.querySelector(".creativeaudio").onclick = () => { exactAudio.outputMode = "reference"; renderAttachBar(); saveComposer(); if ($("prompt")) $("prompt").placeholder = "Describe los visuales y qué sonidos o canto debe añadir H3 sin alterar la pista base…"; toast("♫ Referencia + ambiente · partially_copy oficial H3"); };
+                bar.appendChild(el);
+            }
+
             bar.style.display = count > 0 ? "flex" : "none";
-            saveComposer();
+            saveComposer(); updateEta();
         }
 
         // ── Persistencia del composer (sobrevive un refresh accidental) ──
@@ -1191,11 +1675,15 @@
                 localStorage.setItem(COMPOSER_KEY, JSON.stringify({
                     prompt: $("prompt") ? $("prompt").value : "",
                     mode,
+                    outputType: $("outputType") ? $("outputType").value : "video",
+                    aspect, imageQuality, audioQuality, imageCapture, imageCount,
                     firstImage: firstImage ? { name: firstImage, disabled: firstImageDisabled } : null,
                     lastImage: lastImage ? { name: lastImage, disabled: lastImageDisabled } : null,
                     refImages: refImages.map(r => ({ name: r.name, disabled: !!r.disabled })),
                     refVideo: refVideo ? { name: refVideo.name, label: refVideo.label, disabled: !!refVideo.disabled } : null,
-                    refAudios: refAudios.map(r => ({ name: r.name, label: r.label, disabled: !!r.disabled }))
+                    videoEdit: videoEdit ? { source: videoEdit.source, duration: videoEdit.duration, start: videoEdit.start, end: videoEdit.end, width: videoEdit.width, height: videoEdit.height } : null,
+                    refAudios: refAudios.map(r => ({ name: r.name, label: r.label, disabled: !!r.disabled })),
+                    exactAudio: exactAudio ? { name: exactAudio.name, label: exactAudio.label, duration: exactAudio.duration, disabled: !!exactAudio.disabled, outputMode: exactAudio.outputMode || "original" } : null
                 }));
             } catch (e) { }
         }
@@ -1203,11 +1691,20 @@
             let s; try { s = JSON.parse(localStorage.getItem(COMPOSER_KEY) || "null"); } catch (e) { s = null; }
             if (!s) return;
             if ($("prompt") && s.prompt) $("prompt").value = s.prompt;
+            if (s.aspect && RES[s.aspect] && IMAGE_RES[s.aspect]) aspect = s.aspect;
+            if (s.imageQuality && IMAGE_RES[aspect][s.imageQuality]) imageQuality = s.imageQuality;
+            audioQuality = 64;
+            if (["first", "middle", "last"].includes(s.imageCapture)) imageCapture = s.imageCapture;
+            imageCount = Number(s.imageCount) === 3 ? 3 : 1;
+            if ($("aspect")) [...$("aspect").children].forEach(x => x.classList.toggle("on", x.dataset.a === aspect));
+            if (s.outputType) setOutputType(s.outputType);
             if (s.firstImage) { firstImage = s.firstImage.name; firstImageDisabled = !!s.firstImage.disabled; window._firstImageUrl = inputUrl(firstImage); }
             if (s.lastImage) { lastImage = s.lastImage.name; lastImageDisabled = !!s.lastImage.disabled; window._lastImageUrl = inputUrl(lastImage); }
             refImages = (s.refImages || []).map(r => ({ name: r.name, url: inputUrl(r.name), disabled: !!r.disabled }));
             refVideo = s.refVideo ? { name: s.refVideo.name, label: s.refVideo.label, disabled: !!s.refVideo.disabled } : null;
+            videoEdit = s.videoEdit ? { source: s.videoEdit.source, duration: Number(s.videoEdit.duration || 0), start: Number(s.videoEdit.start || 0), end: Number(s.videoEdit.end || s.videoEdit.duration || 0), width: Number(s.videoEdit.width || 0), height: Number(s.videoEdit.height || 0) } : null;
             refAudios = (s.refAudios || []).map(r => ({ name: r.name, label: r.label, disabled: !!r.disabled }));
+            exactAudio = s.exactAudio ? { name: s.exactAudio.name, label: s.exactAudio.label, duration: Number(s.exactAudio.duration || 0), disabled: !!s.exactAudio.disabled, outputMode: s.exactAudio.outputMode === "reference" ? "reference" : "original" } : null;
             if (firstImage && $("drop")) {
                 const drop = $("drop"); drop.classList.add("has");
                 drop.innerHTML = `<button class="x" title="Quitar">✕</button><img src="${window._firstImageUrl}">`;
@@ -1221,8 +1718,10 @@
             if ($("prompt")) $("prompt").value = "";
             firstImage = null; firstImageDisabled = false; window._firstImageUrl = null;
             lastImage = null; lastImageDisabled = false; window._lastImageUrl = null;
-            refImages = []; refVideo = null; refAudios = []; refVideoAudio = true; extending = null;
+            refImages = []; refVideo = null; refAudios = []; exactAudio = null; videoEdit = null; refVideoAudio = true; extending = null;
+            pendingAudioEdit = null; activeImageEdit = null;
             try { localStorage.removeItem(COMPOSER_KEY); } catch (e) { }
+            setOutputType("video");
             setMode("t2v"); resetDrop(); renderRefs(); renderAttachBar();
             if ($("go")) { const gs = document.querySelector('#go span'); if (gs) gs.textContent = "Generar video"; }
             toast("✨ Nuevo chat");
@@ -1357,9 +1856,94 @@
         if ($("upfvbtn")) $("upfvbtn").onclick = () => { if (window._lastResult) queueUpscale(window._lastResult.filename, "flashvsr_2x"); };
         if ($("rife2btn")) $("rife2btn").onclick = () => { if (window._lastResult) queueInterp(window._lastResult.filename, 2); };
         if ($("rife3btn")) $("rife3btn").onclick = () => { if (window._lastResult) queueInterp(window._lastResult.filename, 3); };
+        async function takeVideoFrame(filename, at = 0, closeAfter = false) {
+            try {
+                const d = await requestPreparedReference(filename, "image", "last", at);
+                if (!refImages.some(x => x.name === d.name)) refImages.push({ name: d.name, url: inputUrl(d.name), disabled: false });
+                setOutputType("video"); setMode("ref"); renderRefs(); renderAttachBar(); saveComposer();
+                if (closeAfter) closeLibrary();
+                if ($("prompt")) { $("prompt").focus(); $("prompt").placeholder = "Describe el nuevo video usando el frame como referencia…"; }
+                toast(`▣ Frame ${Number(at || 0).toFixed(2)}s añadido como referencia`);
+            } catch (e) { showError(e.message); }
+        }
+        async function takeVideoFrameFast(filename, at = 0, closeAfter = false) {
+            try {
+                const d = await requestPreparedReference(filename, "image", "last", at);
+                firstImage = d.name; firstImageDisabled = false; window._firstImageUrl = inputUrl(d.name);
+                // Preserve other attachments but turn them off: any active Ref2V
+                // attachment would route this job through the much slower reference graph.
+                refImages.forEach(r => r.disabled = true);
+                refAudios.forEach(r => r.disabled = true);
+                if (refVideo) refVideo.disabled = true;
+                if (exactAudio) exactAudio.disabled = true;
+                setOutputType("video"); setMode("i2v"); renderRefs(); renderAttachBar(); saveComposer();
+                if (closeAfter) closeLibrary();
+                if ($("prompt")) { $("prompt").focus(); $("prompt").placeholder = "Describe la nueva escena que comienza exactamente desde este frame…"; }
+                toast(`⚡ Nueva escena rápida desde ${Number(at || 0).toFixed(2)}s · perfiles Turbo disponibles`);
+            } catch (e) { showError(e.message); }
+        }
+        async function takeVideoAudio(filename, closeAfter = false) {
+            try {
+                const d = await requestPreparedReference(filename, "audio");
+                if (!refAudios.some(x => x.name === d.name)) refAudios.push({ name: d.name, label: d.name, disabled: false });
+                setOutputType("video"); setMode("ref"); renderRefs(); renderAttachBar(); saveComposer();
+                if (closeAfter) closeLibrary();
+                if ($("prompt")) { $("prompt").focus(); $("prompt").placeholder = "Describe el nuevo video usando el audio como referencia…"; }
+                toast("♫ Audio del video añadido como referencia");
+            } catch (e) { showError(e.message); }
+        }
+        async function takeVideoAudioExact(filename, closeAfter = false) {
+            try {
+                const d = await requestPreparedReference(filename, "audio");
+                useExactAudio(d.name, d.name, d.duration || 0);
+                if (closeAfter) closeLibrary();
+            } catch (e) { showError(e.message); }
+        }
+        async function useCreationAsExactAudio(filename, closeAfter = false) {
+            return takeVideoAudioExact(filename, closeAfter);
+        }
+        if ($("takeFrameBtn")) $("takeFrameBtn").onclick = () => {
+            const it = window._lastResult, p = $("player");
+            if (it?.kind === "video") takeVideoFrame(it.filename, Number(p?.currentTime || 0));
+        };
+        if ($("takeFastFrameBtn")) $("takeFastFrameBtn").onclick = () => {
+            const it = window._lastResult, p = $("player");
+            if (it?.kind === "video") takeVideoFrameFast(it.filename, Number(p?.currentTime || 0));
+        };
+        if ($("takeAudioBtn")) $("takeAudioBtn").onclick = () => {
+            const it = window._lastResult;
+            if (it?.kind === "video") takeVideoAudio(it.filename);
+        };
+        if ($("takeExactAudioBtn")) $("takeExactAudioBtn").onclick = () => {
+            const it = window._lastResult;
+            if (it?.kind === "video") takeVideoAudioExact(it.filename);
+        };
+        if ($("audioExactResultBtn")) $("audioExactResultBtn").onclick = () => {
+            const it = window._lastResult;
+            if (it?.kind === "audio") useCreationAsExactAudio(it.filename);
+        };
+        if ($("imgUp2Btn")) $("imgUp2Btn").onclick = () => { if (window._lastResult) queueImageUpscale(window._lastResult.filename, 2); };
+        if ($("imgUp4Btn")) $("imgUp4Btn").onclick = () => { if (window._lastResult) queueImageUpscale(window._lastResult.filename, 4); };
+        if ($("resultRefBtn")) $("resultRefBtn").onclick = () => { if (window._lastResult) prepareReference(window._lastResult.filename, window._lastResult.kind || "video", false, window._lastResult.position); };
+        if ($("resultEditBtn")) $("resultEditBtn").onclick = () => { if (window._lastResult) prepareReference(window._lastResult.filename, window._lastResult.kind || "video", true, window._lastResult.position); };
+        async function resultAsFrame(which) {
+            if (!window._lastResult) return;
+            try {
+                const d = await requestPreparedReference(window._lastResult.filename, "image", window._lastResult.position);
+                if (which === "first") { firstImage = d.name; firstImageDisabled = false; window._firstImageUrl = inputUrl(d.name); }
+                else { lastImage = d.name; lastImageDisabled = false; window._lastImageUrl = inputUrl(d.name); }
+                setOutputType("video"); setMode("i2v"); renderAttachBar(); saveComposer();
+                if ($("prompt")) $("prompt").focus();
+                toast(which === "first" ? "Imagen añadida como primer frame" : "Imagen añadida como último frame");
+            } catch (e) { showError(e.message); }
+        }
+        if ($("imgFirstBtn")) $("imgFirstBtn").onclick = () => resultAsFrame("first");
+        if ($("imgLastBtn")) $("imgLastBtn").onclick = () => resultAsFrame("last");
         if ($("newgen")) $("newgen").onclick = () => {
             if ($("resultbar")) $("resultbar").style.display = "none";
             if ($("player")) { $("player").pause(); $("player").classList.add("hidden"); }
+            if ($("audioWrap")) $("audioWrap").classList.add("hidden");
+            if ($("imageStudio")) { $("imageStudio").classList.add("hidden"); $("imageStudio").classList.remove("flex"); }
             if ($("empty")) $("empty").style.display = "flex";
         };
 
@@ -1394,7 +1978,7 @@
                 if ($("empty")) $("empty").style.display = "none";
                 if ($("player")) $("player").classList.add("hidden");
                 if ($("audioWrap")) $("audioWrap").classList.add("hidden");
-                if ($("imageResult")) $("imageResult").classList.add("hidden");
+                if ($("imageStudio")) { $("imageStudio").classList.add("hidden"); $("imageStudio").classList.remove("flex"); }
                 if ($("resultbar")) $("resultbar").style.display = "none";
             }
         }
@@ -1428,7 +2012,10 @@
                         seed: (d.seed != null ? d.seed : (spec.info.seed != null ? spec.info.seed : 0)),
                         length: d.length || spec.info.length || 0,
                         audioOnly: !!spec.info.audioOnly,
-                        imageOnly: !!spec.info.imageOnly
+                        imageOnly: !!spec.info.imageOnly,
+                        videoEdit: !!spec.info.videoEdit,
+                        imageCapture: spec.info.imageCapture || "last",
+                        imageCount: Number(spec.info.imageCount) === 3 ? 3 : 1
                     }
                 };
                 poll(activeJob.id, activeJob.info);
@@ -1467,38 +2054,175 @@
             }; tick();
         }
 
+        function showResultActions(kind) {
+            const video = $("videoResultActions"), image = $("imageResultActions");
+            if (video) video.style.display = kind === "video" ? "flex" : "none";
+            if (image) { image.classList.toggle("hidden", kind !== "image"); image.classList.toggle("flex", kind === "image"); }
+            if ($("audioExactResultBtn")) $("audioExactResultBtn").style.display = kind === "audio" ? "inline-flex" : "none";
+            if ($("resultRefBtn")) $("resultRefBtn").textContent = kind === "audio" ? "↗ Audio de referencia" : "↗ Referencia";
+            if ($("resultEditBtn")) $("resultEditBtn").textContent = kind === "audio" ? "✦ Editar audio" : kind === "image" ? "✦ Editar imagen" : "✦ Editar video";
+        }
+
+        // ── Estudio de imagen: una generación puede entregar inicio/medio/final
+        // y cada nueva edición queda a la derecha como una versión seleccionable.
+        const IMAGE_HISTORY_KEY = "lai_image_history_v1";
+        function imageFrameUrl(item) {
+            return "/api/frame?name=" + encodeURIComponent(item.filename) + "&pos=" + encodeURIComponent(item.position || "last");
+        }
+        function saveImageHistory() {
+            try { localStorage.setItem(IMAGE_HISTORY_KEY, JSON.stringify(imageHistory.slice(-36))); } catch (e) { }
+        }
+        function loadImageHistory() {
+            try {
+                const a = JSON.parse(localStorage.getItem(IMAGE_HISTORY_KEY) || "[]");
+                imageHistory = Array.isArray(a) ? a.filter(x => x && x.filename).slice(-36) : [];
+            } catch (e) { imageHistory = []; }
+            renderImageHistory();
+        }
+        function renderImageHistory() {
+            const box = $("imageHistoryList"); if (!box) return; box.innerHTML = "";
+            if ($("imageHistoryCount")) $("imageHistoryCount").textContent = String(imageHistory.length);
+            [...imageHistory].reverse().forEach((item, revIndex) => {
+                const index = imageHistory.length - 1 - revIndex;
+                const el = document.createElement("div");
+                const selected = activeImageEdit && activeImageEdit.filename === item.filename && activeImageEdit.position === item.position;
+                el.className = `group rounded-xl border p-1.5 ${selected ? "border-cyan-500 bg-cyan-950/30" : "border-neutral-800 bg-neutral-900/70 hover:border-neutral-600"}`;
+                el.innerHTML = `<button type="button" class="view block w-full overflow-hidden rounded-lg bg-black" title="Ver grande y editar"><img src="${imageFrameUrl(item)}" loading="lazy" class="h-20 w-full object-contain"></button>
+                    <div class="mt-1 flex items-center gap-1 text-[8px]"><span class="min-w-0 flex-1 truncate text-neutral-400">${item.label || "Imagen"}</span>
+                    <button type="button" class="edit rounded bg-cyan-900/35 px-1 py-0.5 text-cyan-200">Editar</button>
+                    <a class="rounded bg-neutral-800 px-1 py-0.5 text-white" href="${imageFrameUrl(item)}" download="${item.filename.replace(/\.mp4$/i, "")}_${item.position || "last"}.jpg">↓</a></div>`;
+                el.querySelector(".view").onclick = () => selectImageVersion(index, true);
+                el.querySelector(".edit").onclick = () => selectImageVersion(index, true);
+                box.appendChild(el);
+            });
+        }
+        async function selectImageVersion(index, editMode = true) {
+            const item = imageHistory[index]; if (!item) return;
+            const im = $("imageResult"), studio = $("imageStudio");
+            if (im) im.src = imageFrameUrl(item);
+            if (studio) { studio.classList.remove("hidden"); studio.classList.add("flex"); }
+            if ($("empty")) $("empty").style.display = "none";
+            if ($("player")) $("player").classList.add("hidden");
+            if ($("audioWrap")) $("audioWrap").classList.add("hidden");
+            if ($("imageSetBadge")) $("imageSetBadge").textContent = `${item.label || "Imagen"} · ${item.width || ""}×${item.height || ""}`;
+            if ($("dl")) { $("dl").href = imageFrameUrl(item); $("dl").download = item.filename.replace(/\.mp4$/i, "") + `_${item.position || "last"}.jpg`; }
+            window._lastResult = { filename: item.filename, width: item.width, height: item.height, kind: "image", position: item.position || "last" };
+            showResultActions("image");
+            if ($("resultbar")) $("resultbar").style.display = "flex";
+            if (!editMode) { renderImageHistory(); return; }
+            try {
+                if (!item.refName) {
+                    const d = await requestPreparedReference(item.filename, "image", item.position || "last");
+                    item.refName = d.name; saveImageHistory();
+                }
+                activeImageEdit = item;
+                setOutputType("image");
+                if ($("prompt")) { $("prompt").value = ""; $("prompt").placeholder = "Describe qué quieres cambiar en esta imagen…"; $("prompt").focus(); }
+                renderImageHistory(); saveComposer();
+                toast("✦ Modo edición · escribe el cambio para esta imagen");
+            } catch (e) { showError(e.message); }
+        }
+        if ($("imageFullscreenBtn")) $("imageFullscreenBtn").onclick = () => {
+            const im = $("imageResult"); if (!im) return;
+            if (document.fullscreenElement) document.exitFullscreen(); else im.requestFullscreen?.();
+        };
+
+        let audioWave = null, audioSelection = null, audioDragStart = null, pendingAudioEdit = null;
+        function paintAudioWave() {
+            const c = $("audioWave"); if (!c || !audioWave) return;
+            const x = c.getContext("2d"), w = c.width, h = c.height; x.clearRect(0, 0, w, h);
+            x.fillStyle = "#050505"; x.fillRect(0, 0, w, h);
+            if (audioSelection) {
+                x.fillStyle = "rgba(34,211,238,.22)";
+                x.fillRect(audioSelection.start / audioWave.duration * w, 0, (audioSelection.end-audioSelection.start) / audioWave.duration * w, h);
+            }
+            x.strokeStyle = "#60a5fa"; x.lineWidth = 1; x.beginPath();
+            const data = audioWave.data, stride = Math.max(1, Math.floor(data.length / w));
+            for (let px=0; px<w; px++) {
+                let peak=0; const from=px*stride, to=Math.min(data.length,from+stride);
+                for(let i=from;i<to;i++) peak=Math.max(peak,Math.abs(data[i]));
+                x.moveTo(px,h/2-peak*h*.45); x.lineTo(px,h/2+peak*h*.45);
+            }
+            x.stroke();
+            if ($("audioSelectionLabel")) $("audioSelectionLabel").textContent = audioSelection ? `${audioSelection.start.toFixed(2)}s – ${audioSelection.end.toFixed(2)}s` : "Sin selección";
+        }
+        async function drawAudioWaveform() {
+            const ap=$("audioPlayer"), c=$("audioWave"); if(!ap || !c || !ap.src) return;
+            try {
+                const buf=await (await fetch(ap.src)).arrayBuffer();
+                const ac=new (window.AudioContext||window.webkitAudioContext)(); const decoded=await ac.decodeAudioData(buf.slice(0));
+                audioWave={data:decoded.getChannelData(0),duration:decoded.duration}; audioSelection=null; paintAudioWave(); ac.close();
+            } catch(e) { }
+        }
+        if ($("audioWave")) {
+            const timeAt = e => { const r=$("audioWave").getBoundingClientRect(); return Math.max(0,Math.min(audioWave?.duration||0,(e.clientX-r.left)/r.width*(audioWave?.duration||0))); };
+            $("audioWave").onpointerdown=e=>{if(!audioWave)return;audioDragStart=timeAt(e);audioSelection={start:audioDragStart,end:audioDragStart};$("audioWave").setPointerCapture(e.pointerId);paintAudioWave();};
+            $("audioWave").onpointermove=e=>{if(audioDragStart==null)return;const t=timeAt(e);audioSelection={start:Math.min(audioDragStart,t),end:Math.max(audioDragStart,t)};paintAudioWave();};
+            $("audioWave").onpointerup=e=>{audioDragStart=null;if(audioSelection && audioSelection.end-audioSelection.start<.1)audioSelection=null;paintAudioWave();};
+        }
+        if ($("editAudioSelectionBtn")) $("editAudioSelectionBtn").onclick = async () => {
+            if (!audioSelection || !window._lastResult) { toast("Arrastra sobre la onda para seleccionar una sección"); return; }
+            const editSource=window._lastResult.filename, editStart=audioSelection.start, editEnd=audioSelection.end;
+            await prepareReference(editSource,"audio",true);
+            pendingAudioEdit={source:editSource,start:editStart,end:editEnd};
+            const secs=Math.max(2,Math.round((audioSelection.end-audioSelection.start)*10)/10);
+            if ($("durMin")) $("durMin").value=Math.floor(secs/60); if ($("durSec")) $("durSec").value=Math.round(secs%60); syncDur();
+            toast("Sección preparada · escribe el cambio y genera audio");
+        };
+
         function onDone(name, gen, info) {
             setBar(100); if ($("progtxt")) $("progtxt").textContent = "¡Listo!";
-            setTimeout(() => {
+            setTimeout(async () => {
                 activeJob = null;
                 // Solo audio: reproduce el mp3, NO el video
                 if (info && info.audioOnly) {
+                    if (pendingAudioEdit) {
+                        try {
+                            const rr=await fetch("/api/replace-audio",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...pendingAudioEdit,replacement:name,prompt:$("prompt")?.value||"Audio editado"})});
+                            const rd=await rr.json(); if(!rr.ok)throw new Error(rd.error||"No se pudo reemplazar la selección"); name=rd.name;
+                            toast("✓ Sección reemplazada en el audio completo");
+                        } catch(e) { showError(e.message); }
+                        pendingAudioEdit=null;
+                    }
                     const ap = $("audioPlayer"), aw = $("audioWrap");
                     if (ap) { ap.src = "/api/audio?name=" + encodeURIComponent(name); ap.load(); ap.play().catch(() => { }); }
                     if (aw) aw.classList.remove("hidden");
+                    if ($("imageStudio")) { $("imageStudio").classList.add("hidden"); $("imageStudio").classList.remove("flex"); }
                     if ($("player")) $("player").classList.add("hidden");
                     if ($("prog")) $("prog").style.display = "none";
                     if ($("empty")) $("empty").style.display = "none";
                     if ($("resulttag")) $("resulttag").textContent = "🎧 Audio listo" + (gen ? ` · ⏱ ${fmtTime(gen)}` : "");
                     if ($("dl")) { $("dl").href = "/api/audio?name=" + encodeURIComponent(name); $("dl").download = name.split("/").pop().replace(/\.mp4$/, "") + ".mp3"; }
+                    window._lastResult = { filename: name, width: info.w, height: info.h, kind: "audio" };
+                    showResultActions("audio"); drawAudioWaveform();
                     if ($("resultbar")) $("resultbar").style.display = "flex";
-                    setGenPill("", false); nextJob(); return;
+                    loadLibrary(); setGenPill("", false); nextJob(); return;
                 }
                 // Solo imagen: muestra el frame (jpg), NO el video
                 if (info && info.imageOnly) {
-                    const im = $("imageResult");
-                    if (im) { im.src = "/api/frame?name=" + encodeURIComponent(name); im.classList.remove("hidden"); }
                     if ($("player")) $("player").classList.add("hidden");
                     if ($("audioWrap")) $("audioWrap").classList.add("hidden");
                     if ($("prog")) $("prog").style.display = "none";
                     if ($("empty")) $("empty").style.display = "none";
-                    if ($("resulttag")) $("resulttag").textContent = `🖼 Imagen lista · ${info.w}×${info.h}` + (gen ? ` · ⏱ ${fmtTime(gen)}` : "");
-                    if ($("dl")) { $("dl").href = "/api/frame?name=" + encodeURIComponent(name); $("dl").download = name.split("/").pop().replace(/\.mp4$/, "") + ".jpg"; }
-                    if ($("resultbar")) $("resultbar").style.display = "flex";
-                    setGenPill("", false); nextJob(); return;
+                    const positions = Number(info.imageCount) === 3 ? ["first", "middle", "last"] : [info.imageCapture || "last"];
+                    const batch = Date.now();
+                    positions.forEach((position, i) => {
+                        if (!imageHistory.some(x => x.filename === name && x.position === position)) {
+                            imageHistory.push({ filename: name, position, width: info.w, height: info.h,
+                                label: `${positions.length === 3 ? `Imagen ${i + 1}/3` : "Imagen"} · ${position === "first" ? "Inicio" : position === "middle" ? "Medio" : "Final"}`,
+                                batch });
+                        }
+                    });
+                    saveImageHistory(); renderImageHistory();
+                    const wanted = info.imageCapture || (positions.length === 3 ? "middle" : positions[0]);
+                    let selected = imageHistory.findIndex(x => x.filename === name && x.position === wanted);
+                    if (selected < 0) selected = imageHistory.length - 1;
+                    await selectImageVersion(selected, true);
+                    if ($("resulttag")) $("resulttag").textContent = `🖼 ${positions.length} imagen${positions.length > 1 ? "es" : ""} · ${info.w}×${info.h}` + (gen ? ` · ⏱ ${fmtTime(gen)}` : "");
+                    loadLibrary(); setGenPill("", false); nextJob(); return;
                 }
                 if ($("audioWrap")) $("audioWrap").classList.add("hidden");
-                if ($("imageResult")) $("imageResult").classList.add("hidden");
+                if ($("imageStudio")) { $("imageStudio").classList.add("hidden"); $("imageStudio").classList.remove("flex"); }
                 const p = $("player");
                 if (p) {
                     p.src = "/api/video?name=" + encodeURIComponent(name);
@@ -1510,7 +2234,8 @@
                 if ($("empty")) $("empty").style.display = "none";
                 if ($("resulttag")) $("resulttag").textContent = `✓ LISTO · ${info.w}×${info.h} · seed ${info.seed}` + (gen ? ` · ⏱ ${fmtTime(gen)}` : "");
                 if ($("dl")) { $("dl").href = "/api/video?name=" + encodeURIComponent(name); $("dl").download = name.split("/").pop(); }
-                window._lastResult = { filename: name, width: info.w, height: info.h };
+                window._lastResult = { filename: name, width: info.w, height: info.h, kind: "video" };
+                showResultActions("video");
                 if ($("resultbar")) $("resultbar").style.display = "flex";
                 loadLibrary();
                 nextJob();
@@ -1530,9 +2255,6 @@
         // grandes/largos en la 3090. Zona estable comprobada: ≤768p y clips cortos. Fuera de
         // eso lo apagamos solo (Turbo LoRA, que da el grueso del ahorro, sigue activo).
         function effectiveTurbo() {
-            if (turbo === "off") return "off";
-            const secs = Number($("dur") ? $("dur").value : 8) || 8;
-            if (resW * resH > 1032192 || secs > 20) return "off";  // 2K/4K o clips largos
             return turbo;
         }
         function buildGenerateSpec() {
@@ -1544,15 +2266,16 @@
             const enRefImgs = refImages.filter(r => !r.disabled);
             const enRefVid = (refVideo && !refVideo.disabled) ? refVideo : null;
             const enRefAud = refAudios.filter(r => !r.disabled);
+            const enExactAudio = (exactAudio && !exactAudio.disabled) ? exactAudio : null;
 
             // Auto-detectar modo si el usuario pegó/subió una imagen
             if ((hasFirst || hasLast) && mode === "t2v") {
                 setMode("i2v");
-            } else if ((enRefImgs.length || enRefVid || enRefAud.length) && mode === "t2v") {
+            } else if ((enRefImgs.length || enRefVid || enRefAud.length || enExactAudio) && mode === "t2v") {
                 setMode("ref");
             }
 
-            const hasRef = enRefImgs.length || enRefVid || enRefAud.length;
+            const hasRef = enRefImgs.length || enRefVid || enRefAud.length || enExactAudio;
             if (extending) {
                 if (!extending.source) { showError("No hay video que extender."); return null; }
                 return {
@@ -1568,18 +2291,25 @@
             // Config pesada para 24 GB: activa Sage (atención con menos memoria) y no retiene
             // extra en VRAM, para intentar que quepa sin crashear (en vez de bloquearla).
             let effTurbo = effectiveTurbo(), effMemOn = (memBoost === "on");
-            if (turbo !== "off" && effTurbo === "off") {
-                toast("⚠ Sage se auto-apagó (2K/4K o clip largo — ahí crashea el kernel Triton). Turbo LoRA sigue activo.");
+            let effTurboLora = turboLora === "on", effTurbo4 = turbo4 === "on";
+            let effSteps = hasRef ? Math.max(20, steps) : steps;
+            // Turbo LoRA solo admite el lote normal de texto. Reference→Video
+            // añade una condición extra (imagen, audio o video) y su adaptación
+            // interna falla con "3 vs 2". Sage+Cache sí sigue siendo compatible.
+            if (hasRef && (effTurboLora || effTurbo4)) {
+                effTurboLora = false; effTurbo4 = false;
+                toast("Referencia activa: Turbo LoRA se apaga solo para evitar el fallo; Sage+Cache sigue activo.");
             }
             if (vramTooHeavy()) {
-                // Config muy pesada para 24 GB → además soltamos 'menos offload' para que quepa.
-                effTurbo = "off";
+                // Sage+Cache permanece activo; solo soltamos la retención extra de VRAM.
                 effMemOn = false;
-                toast("⚠ Config pesada para 24 GB — desactivé aceleradores y 'menos offload' para que NO crashee (Turbo LoRA sigue activo).");
+                toast("⚠ Config pesada: Sage+Cache permanece activo; solo desactivé 'Menos offload' para liberar VRAM.");
             }
             const p = {
-                mode, prompt, width: resW, height: resH, seconds: Number($("dur").value), steps, turbo: effTurbo, upscale, model, aspect,
-                mem_factor: effMemOn ? 0.5 : null, turbo_lora: turboLora === "on", spectrum: spectrum === "on", seed: sv === "" ? null : Number(sv),
+                mode, prompt, width: resW, height: resH, seconds: Number($("dur").value), steps: effSteps, turbo: effTurbo, upscale, model, aspect,
+                mem_factor: maxVram === "on" ? 0.08 : (effMemOn ? 0.5 : null), turbo_lora: effTurboLora, turbo_4: effTurbo4, compile_vae: compileVae === "on", vae_int8: vaeInt8 === "on",
+                firstblock: firstBlock, quick_profile: activeQuickProfile, offload_profile: offloadProfile,
+                spectrum: false, seed: sv === "" ? null : Number(sv),
                 project: currentProject === '__master__' ? 'General' : currentProject,
                 first_image: mode !== "ref" ? (hasFirst ? firstImage : null) : null,
                 last_image: mode !== "ref" ? (hasLast ? lastImage : null) : null
@@ -1587,41 +2317,98 @@
             if (mode === "ref") {
                 p.ref_images = enRefImgs.map(r => r.name); p.ref_video = enRefVid ? enRefVid.name : null;
                 p.ref_video_audio = refVideoAudio; p.ref_audios = enRefAud.map(r => r.name);
+                if (enRefVid && videoEdit) {
+                    p.video_edit = true;
+                    p.video_edit_source = videoEdit.source;
+                    p.video_edit_start = Number(videoEdit.start || 0);
+                    p.video_edit_end = Number(videoEdit.end || videoEdit.duration || 0);
+                    // The selected interval controls generation duration.
+                    p.seconds = Math.max(.1, p.video_edit_end - p.video_edit_start);
+                }
+                if (enExactAudio) {
+                    p.exact_audio = enExactAudio.name;
+                    p.exact_audio_duration = true;
+                    p.exact_audio_output = enExactAudio.outputMode === "reference" ? "reference" : "original";
+                    p.ref_video_audio = false;
+                    p.ref_audios = [enExactAudio.name, ...p.ref_audios.filter(n => n !== enExactAudio.name)];
+                }
             }
-            return { endpoint: "/api/generate", startLabel: "Enviando…", payload: p, info: { w: resW, h: resH } };
+            const outInfo = videoEdit && enRefVid ? {
+                w: videoEdit.width || resW, h: videoEdit.height || resH,
+                length: Math.round((videoEdit.duration || p.seconds) * 24), videoEdit: true
+            } : { w: resW, h: resH };
+            return { endpoint: "/api/generate", startLabel: videoEdit && enRefVid ? "Preparando edición H3…" : "Enviando…", payload: p, info: outInfo };
+        }
+
+        function addActiveReferences(p) {
+            const imgs = refImages.filter(r => !r.disabled);
+            const vid = (refVideo && !refVideo.disabled) ? refVideo : null;
+            const auds = refAudios.filter(r => !r.disabled);
+            const hasFirst = firstImage && !firstImageDisabled;
+            const hasLast = lastImage && !lastImageDisabled;
+            if (imgs.length || vid || auds.length) {
+                p.mode = "ref"; p.ref_images = imgs.map(r => r.name);
+                p.ref_video = vid ? vid.name : null; p.ref_video_audio = refVideoAudio;
+                p.ref_audios = auds.map(r => r.name);
+            } else if (hasFirst || hasLast) {
+                p.mode = "i2v"; p.first_image = hasFirst ? firstImage : null;
+                p.last_image = hasLast ? lastImage : null;
+            }
+            return p;
+        }
+
+        function audioDurationFromPrompt(removeTag = false) {
+            const box = $("prompt"); if (!box) return { prompt: "", seconds: Number($("dur").value) };
+            const raw = box.value || "";
+            const match = raw.match(/#(\d{1,2})[.:](\d{1,2})#/);
+            if (!match) return { prompt: raw.trim(), seconds: Number($("dur").value) };
+            const total = Math.max(2, Math.min(150, Number(match[1]) * 60 + Number(match[2])));
+            if ($("durMin")) $("durMin").value = Math.floor(total / 60);
+            if ($("durSec")) $("durSec").value = total % 60;
+            syncDur();
+            return { prompt: (removeTag ? raw.replace(match[0], " ") : raw).replace(/\s+/g, " ").trim(), seconds: total };
         }
 
         // Solo audio (prueba interna): genera a 64x64 (imagen ~0 esfuerzo) y entrega el mp3.
         function audioOnlyGenerate() {
-            const prompt = $("prompt") ? $("prompt").value.trim() : "";
+            const tagged = audioDurationFromPrompt(true);
+            const prompt = tagged.prompt;
             if (!prompt) { showError("Escribe un prompt (describe bien el audio)."); return; }
             const sv = $("seed") ? $("seed").value.trim() : "";
             const p = {
-                mode: "t2v", prompt, width: 64, height: 64, seconds: Number($("dur").value),
-                steps, turbo_lora: turboLora === "on", audio_only: true,
+                mode: "t2v", prompt, width: 64, height: 64, seconds: tagged.seconds,
+                steps, turbo_lora: turboLora === "on", audio_only: true, audio_size: audioQuality,
                 seed: sv === "" ? null : Number(sv),
                 project: currentProject === '__master__' ? 'General' : currentProject
             };
-            submitJob({ endpoint: "/api/generate", startLabel: "🎧 Generando audio…", payload: p, info: { w: 64, h: 64, audioOnly: true } });
+            addActiveReferences(p);
+            submitJob({ endpoint: "/api/generate", startLabel: "🎧 Generando audio…", payload: p, info: { w: audioQuality, h: audioQuality, audioOnly: true } });
         }
         let lastAudioClick = 0;
         if ($("audioOnlyBtn")) $("audioOnlyBtn").onclick = () => {
             const now = Date.now(); if (now - lastAudioClick < 1200) return; lastAudioClick = now;
             audioOnlyGenerate();
         };
-        // Solo imagen (prueba interna): 1 frame a la resolución elegida (1K/2K), en segundos.
-        // Sage OFF para no crashear en alta resolución; sin audio necesario.
+        // Imagen: H3 genera sus 5 frames mínimos y el servidor los guarda a 48 fps
+        // (~0.10 s). Podemos entregar uno o extraer inicio/medio/final sin ejecutar 3 jobs.
         function imageOnlyGenerate() {
             const prompt = $("prompt") ? $("prompt").value.trim() : "";
             if (!prompt) { showError("Escribe un prompt (describe la imagen)."); return; }
             const sv = $("seed") ? $("seed").value.trim() : "";
             const p = {
-                mode: "t2v", prompt, width: resW, height: resH, seconds: 1,
+                mode: "t2v", prompt, width: resW, height: resH, seconds: 0.10,
                 steps: 30, turbo: "off", turbo_lora: false, image_only: true,  // máxima calidad siempre
+                image_capture: imageCapture, image_count: imageCount,
                 seed: sv === "" ? null : Number(sv),
                 project: currentProject === '__master__' ? 'General' : currentProject
             };
-            submitJob({ endpoint: "/api/generate", startLabel: "🖼 Generando imagen…", payload: p, info: { w: resW, h: resH, imageOnly: true } });
+            addActiveReferences(p);
+            if (activeImageEdit && activeImageEdit.refName) {
+                p.mode = "ref";
+                p.ref_images = [activeImageEdit.refName, ...(p.ref_images || []).filter(n => n !== activeImageEdit.refName)].slice(0, 3);
+            }
+            submitJob({ endpoint: "/api/generate", startLabel: imageCount === 3 ? "🖼 Generando 3 imágenes…" : "🖼 Generando imagen…", payload: p,
+                info: { w: resW, h: resH, imageOnly: true, imageCapture, imageCount } });
         }
         let lastImageClick = 0;
         if ($("imageOnlyBtn")) $("imageOnlyBtn").onclick = () => {
@@ -1630,9 +2417,34 @@
         };
 
         let lastGoClick = 0;
+        function setOutputType(kind) {
+            if (!["video", "audio", "image"].includes(kind)) kind = "video";
+            outputKind = kind;
+            if (kind === "video") { const r = RES[aspect][resIdx]; resW = r[0]; resH = r[1]; }
+            if (kind === "image") { const r = IMAGE_RES[aspect][imageQuality]; resW = r[0]; resH = r[1]; }
+            if ($("outputType")) $("outputType").value = kind;
+            if ($("goLabel")) $("goLabel").textContent = kind === "audio" ? "Generar audio" : kind === "image" ? "Generar imagen" : "Generar video";
+            if ($("go")) $("go").title = $("goLabel").textContent;
+            if ($("quickProfiles")) $("quickProfiles").style.display = kind === "video" ? "flex" : "none";
+            if ($("audioAiHelp")) $("audioAiHelp").classList.toggle("hidden", kind !== "audio");
+            const imageMode = kind === "image";
+            if ($("quickTimeLabel")) $("quickTimeLabel").textContent = imageMode ? "1 frame · final" : kind === "audio" ? "Tiempo #0.30#" : "Tiempo";
+            if ($("imageCaptureControls")) { $("imageCaptureControls").classList.toggle("hidden", !imageMode); $("imageCaptureControls").classList.toggle("flex", imageMode); }
+            if ($("quickAspects")) $("quickAspects").classList.toggle("hidden", kind === "audio");
+            for (const id of ["quickMin", "quickSec"]) {
+                const el = $(id); if (!el) continue; el.style.display = imageMode ? "none" : "block";
+                if (el.nextElementSibling) el.nextElementSibling.style.display = imageMode ? "none" : "inline";
+            }
+            renderQuickQuality(); renderQuickAspects(); paintImageCapture(); updateEta();
+            saveComposer();
+        }
+        if ($("outputType")) $("outputType").onchange = e => setOutputType(e.target.value);
         if ($("go")) $("go").onclick = () => {
             const now = Date.now(); if (now - lastGoClick < 1200) return; lastGoClick = now;  // anti-rebote: ignora doble-clic accidental
             if (creativeMode) { creativeSubmitFromChat(); return; }   // en el Espacio Creativo: ＋ nuevo segmento o ⇢ extender, según el modo
+            const output = $("outputType") ? $("outputType").value : "video";
+            if (output === "audio") { audioOnlyGenerate(); return; }
+            if (output === "image") { imageOnlyGenerate(); return; }
             const spec = buildGenerateSpec(); if (!spec) return; showError(""); submitJob(spec);
         };
 
@@ -1641,6 +2453,15 @@
             submitJob({
                 endpoint: "/api/upscale", startLabel: "Escalando — " + (up.startsWith("flashfast") ? "VSR Rápido" : "VSR Calidad"),
                 payload: { source: name, upscale: up }, info: { w: 0, h: 0, seed: 0 }
+            });
+        }
+
+        function queueImageUpscale(name, scale) {
+            closeLibrary();
+            submitJob({
+                endpoint: "/api/upscale", startLabel: `Escalando imagen ${scale}× (RealESRGAN)…`,
+                payload: { source: name, upscale: `esrgan_${scale}x`, image_only: true },
+                info: { w: (window._lastResult?.width || 0) * scale, h: (window._lastResult?.height || 0) * scale, seed: 0, imageOnly: true }
             });
         }
 
@@ -1744,22 +2565,49 @@
             } catch (e) { showError(e.message); }
         }
 
+        // Abre cualquier creación de la Biblioteca en el stage principal, con
+        // exactamente las mismas acciones que tiene una creación recién lista.
+        async function viewLibraryCreation(it) {
+            if (!it?.filename) return;
+            const isAud = it.mode === "audio_only", isImg = it.mode === "image_only";
+            closeLibrary();
+            if ($("prog")) $("prog").style.display = "none";
+            if ($("empty")) $("empty").style.display = "none";
+            if (isAud) {
+                const ap = $("audioPlayer");
+                if (ap) { ap.src = "/api/audio?name=" + encodeURIComponent(it.filename); ap.load(); ap.play().catch(() => {}); }
+                if ($("audioWrap")) $("audioWrap").classList.remove("hidden");
+                if ($("player")) $("player").classList.add("hidden");
+                if ($("imageStudio")) { $("imageStudio").classList.add("hidden"); $("imageStudio").classList.remove("flex"); }
+                if ($("resulttag")) $("resulttag").textContent = "🎧 Audio listo · ⏱ " + fmtTime(it.gen_seconds);
+                if ($("dl")) { $("dl").href = "/api/audio?name=" + encodeURIComponent(it.filename); $("dl").download = it.filename.replace(/\.mp4$/i, "") + ".mp3"; }
+                window._lastResult = { filename: it.filename, width: it.width, height: it.height, kind: "audio" };
+                showResultActions("audio"); drawAudioWaveform();
+            } else if (isImg) {
+                let index = imageHistory.findIndex(x => x.filename === it.filename && x.position === "last");
+                if (index < 0) {
+                    imageHistory.push({ filename: it.filename, position: "last", width: it.width, height: it.height, label: "Imagen · Final" });
+                    saveImageHistory(); index = imageHistory.length - 1;
+                }
+                await selectImageVersion(index, false);
+                if ($("resulttag")) $("resulttag").textContent = `🖼 Imagen lista · ${it.width}×${it.height} · ⏱ ${fmtTime(it.gen_seconds)}`;
+            } else {
+                if ($("audioWrap")) $("audioWrap").classList.add("hidden");
+                if ($("imageStudio")) { $("imageStudio").classList.add("hidden"); $("imageStudio").classList.remove("flex"); }
+                const p = $("player");
+                if (p) { p.src = "/api/video?name=" + encodeURIComponent(it.filename); p.classList.remove("hidden"); p.load(); p.play().catch(() => {}); }
+                if ($("resulttag")) $("resulttag").textContent = `✓ LISTO · ${it.width}×${it.height} · seed ${it.seed} · ⏱ ${fmtTime(it.gen_seconds)}`;
+                if ($("dl")) { $("dl").href = "/api/video?name=" + encodeURIComponent(it.filename); $("dl").download = it.filename; }
+                window._lastResult = { filename: it.filename, width: it.width, height: it.height, kind: "video" };
+                showResultActions("video");
+            }
+            if ($("resultbar")) $("resultbar").style.display = "flex";
+        }
+
         async function loadLibrary() {
             try {
                 const r = await fetch("/api/library?project=" + encodeURIComponent(currentProject)); const items = (await r.json()).items || [];
-                const pts = items.filter(i => i.gen_seconds > 3 && i.length && i.width && i.height && i.mode !== "timeline" && i.mode !== "audio_only" && i.mode !== "image_only")
-                    .map(i => [Math.log(i.width * i.height * i.length), Math.log(Math.max(3, i.gen_seconds - 20))]);
-                if (pts.length >= 4) {
-                    let n = pts.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
-                    for (const [x, y] of pts) { sx += x; sy += y; sxx += x * x; sxy += x * y; }
-                    const den = n * sxx - sx * sx;
-                    if (den > 1e-9) {
-                        const p = (n * sxy - sx * sy) / den; fitP = Math.min(2.4, Math.max(1.0, p));
-                        const as = pts.map(([lx, ly]) => Math.exp(ly) / Math.pow(Math.exp(lx), fitP)).sort((a, b) => a - b);
-                        fitA = as[Math.floor(as.length / 2)]; updateEta();
-                    }
-                }
-                if ($("libcount")) $("libcount").textContent = (currentProject === '__master__' ? '🗂 Master · ' : '📁 ' + currentProject + ' · ') + items.length + " videos";
+                if ($("libcount")) $("libcount").textContent = (currentProject === '__master__' ? '🗂 Master · ' : '📁 ' + currentProject + ' · ') + items.length + " creaciones";
                 const grid = $("grid"); if (!grid) return; grid.innerHTML = "";
                 if ($("libempty")) $("libempty").style.display = items.length ? "none" : "block";
                 for (const it of items) {
@@ -1769,7 +2617,7 @@
                     const dlUrl = isAud ? ("/api/audio?name=" + encodeURIComponent(it.filename)) : isImg ? ("/api/frame?name=" + encodeURIComponent(it.filename)) : url;
                     const dlName = isAud ? base.replace(/\.mp4$/, "") + ".mp3" : isImg ? base.replace(/\.mp4$/, "") + ".jpg" : base;
                     const media = isAud
-                        ? `<div class="flex flex-col items-center gap-2 p-4"><div class="text-3xl">🎧</div><audio src="${dlUrl}" controls class="w-full"></audio></div>`
+                        ? `<div class="w-full h-full flex flex-col items-center justify-center gap-3 bg-gradient-to-b from-neutral-800 to-neutral-950 px-4"><div class="text-4xl">🎧</div><audio src="${dlUrl}" controls preload="none" class="w-full max-w-[95%]"></audio></div>`
                         : isImg
                             ? `<img src="${dlUrl}" loading="lazy" class="w-full h-full object-contain">`
                             : `<video src="${url}" preload="metadata" controls playsinline class="w-full h-full object-contain"></video>`;
@@ -1787,18 +2635,36 @@
                 <span>seed ${it.seed}</span>
                 <b class="text-blue-400">⏱ ${fmtTime(it.gen_seconds)}</b>
               </div>
-              <div class="flex flex-wrap gap-1.5 pt-1">
+              <div class="flex flex-wrap gap-1.5 pt-1" style="${isAud || isImg ? 'display:none' : ''}">
                 <button class="upfast flex-1 py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">⚡VSR</button>
                 <button class="upfv flex-1 py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">✨VSR</button>
                 <button class="ext flex-1 py-1 px-2 rounded-lg bg-blue-950/60 hover:bg-blue-900/60 border border-blue-800/60 text-[10px] text-blue-300">⇢ Extender</button>
               </div>
-              <div class="flex flex-wrap gap-1.5">
+              <div class="flex flex-wrap gap-1.5" style="${isAud || isImg ? 'display:none' : ''}">
                 <button class="rife2 flex-1 py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">🌊 48fps</button>
                 <button class="rife3 flex-1 py-1 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">🌊 72fps</button>
               </div>
+              <div class="flex gap-1.5" style="${isAud || isImg ? 'display:none' : ''}">
+                <button class="takeframe flex-1 py-1 px-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/40 border border-violet-500/40 text-[10px] font-bold text-violet-200">▣ Frame actual</button>
+                <button class="takeaudio flex-1 py-1 px-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/40 border border-amber-500/40 text-[10px] font-bold text-amber-200">♫ Audio similar</button>
+              </div>
+              <div class="flex gap-1.5" style="${isAud || isImg ? 'display:none' : ''}">
+                <button class="takefastframe flex-1 py-1 px-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-[10px] font-bold text-emerald-200">⚡ Nueva escena</button>
+                <button class="takeexactaudio flex-1 py-1 px-2 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-500/40 text-[10px] font-bold text-cyan-200">♫ Audio original limpio</button>
+              </div>
+              <div class="flex gap-1.5" style="${isImg ? '' : 'display:none'}">
+                <button class="imgup2lib flex-1 py-1.5 px-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/40 border border-violet-500/40 text-[10px] font-bold text-violet-200">2× Escalar imagen</button>
+                <button class="imgup4lib flex-1 py-1.5 px-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/40 border border-violet-500/40 text-[10px] font-bold text-violet-200">4× Escalar imagen</button>
+              </div>
+              <button class="audioexactlib w-full py-1.5 px-2 rounded-lg bg-cyan-600/25 hover:bg-cyan-600/45 border border-cyan-500/50 text-[10px] font-bold text-cyan-100" style="${isAud ? '' : 'display:none'}">♫ Video + audio original limpio</button>
+              <button class="viewmain w-full py-1.5 px-2 rounded-lg bg-white text-black hover:bg-neutral-200 text-[10px] font-bold">▶ Ver en reproductor</button>
+              <div class="flex gap-1.5">
+                <button class="useref flex-1 py-1.5 px-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/40 border border-violet-500/40 text-[10px] font-bold text-violet-200">↗ Usar como referencia</button>
+                <button class="editmedia flex-1 py-1.5 px-2 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-500/40 text-[10px] font-bold text-cyan-200">✦ Editar</button>
+              </div>
               <button class="recreate w-full py-1.5 px-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/50 text-[10px] font-bold text-emerald-200">♻ Recrear con este setup</button>
               <div class="flex gap-1.5">
-                <button class="creative flex-1 py-1.5 px-2 rounded-lg bg-blue-600/25 hover:bg-blue-600/45 border border-blue-500/50 text-[10px] font-bold text-blue-200">🎬 Espacio creativo</button>
+                <button class="creative flex-1 py-1.5 px-2 rounded-lg bg-blue-600/25 hover:bg-blue-600/45 border border-blue-500/50 text-[10px] font-bold text-blue-200" style="${isAud || isImg ? 'display:none' : ''}">🎬 Espacio creativo</button>
                 <button class="moveproj py-1.5 px-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] text-neutral-300">📁 Mover</button>
               </div>
               <div class="flex items-center gap-1.5 pt-1">
@@ -1817,8 +2683,18 @@
                     el.querySelector(".upfv").onclick = (ev) => { ev.stopPropagation(); queueUpscale(it.filename, "flashvsr_2x"); };
                     el.querySelector(".rife2").onclick = (ev) => { ev.stopPropagation(); queueInterp(it.filename, 2); };
                     el.querySelector(".rife3").onclick = (ev) => { ev.stopPropagation(); queueInterp(it.filename, 3); };
+                    el.querySelector(".takeframe").onclick = (ev) => { ev.stopPropagation(); takeVideoFrame(it.filename, Number(el.querySelector("video")?.currentTime || 0), true); };
+                    el.querySelector(".takeaudio").onclick = (ev) => { ev.stopPropagation(); takeVideoAudio(it.filename, true); };
+                    el.querySelector(".takefastframe").onclick = (ev) => { ev.stopPropagation(); takeVideoFrameFast(it.filename, Number(el.querySelector("video")?.currentTime || 0), true); };
+                    el.querySelector(".takeexactaudio").onclick = (ev) => { ev.stopPropagation(); takeVideoAudioExact(it.filename, true); };
+                    el.querySelector(".viewmain").onclick = (ev) => { ev.stopPropagation(); viewLibraryCreation(it); };
+                    el.querySelector(".imgup2lib").onclick = (ev) => { ev.stopPropagation(); window._lastResult={filename:it.filename,width:it.width,height:it.height,kind:"image"}; queueImageUpscale(it.filename, 2); };
+                    el.querySelector(".imgup4lib").onclick = (ev) => { ev.stopPropagation(); window._lastResult={filename:it.filename,width:it.width,height:it.height,kind:"image"}; queueImageUpscale(it.filename, 4); };
+                    el.querySelector(".audioexactlib").onclick = (ev) => { ev.stopPropagation(); useCreationAsExactAudio(it.filename, true); };
                     el.querySelector(".ext").onclick = (ev) => { ev.stopPropagation(); startExtend(it); };
                     el.querySelector(".creative").onclick = (ev) => { ev.stopPropagation(); openCreative(it); };
+                    el.querySelector(".useref").onclick = (ev) => { ev.stopPropagation(); useLibraryReference(it, false); };
+                    el.querySelector(".editmedia").onclick = (ev) => { ev.stopPropagation(); useLibraryReference(it, true); };
                     el.querySelector(".recreate").onclick = (ev) => { ev.stopPropagation(); applySetup(it); };
                     el.querySelector(".moveproj").onclick = (ev) => { ev.stopPropagation(); moveToProject(it); };
                     el.querySelector(".del").onclick = async (ev) => {
@@ -1829,6 +2705,87 @@
                     grid.appendChild(el);
                 }
             } catch (e) { }
+        }
+
+        async function requestPreparedReference(filename, kind, position = "last", at = null) {
+            const r = await fetch("/api/prepare-reference", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: filename, kind, position, at })
+                });
+            const d = await r.json(); if (!r.ok) throw new Error(d.error || "No se pudo preparar la referencia");
+            return d;
+        }
+        async function prepareReference(filename, kind, edit, position = "last") {
+            try {
+                if (edit && kind === "audio") pendingAudioEdit = null;
+                const d = await requestPreparedReference(filename, kind, position);
+                if (kind === "image") {
+                    if (!refImages.some(x => x.name === d.name)) refImages.push({ name: d.name, url: inputUrl(d.name), disabled: false });
+                } else if (kind === "audio") {
+                    if (!refAudios.some(x => x.name === d.name)) refAudios.push({ name: d.name, label: d.name, disabled: false });
+                } else {
+                    refVideo = { name: d.name, label: d.name, disabled: false }; refVideoAudio = true;
+                    if (edit) {
+                        const total = Math.max(.1, Number(d.duration || 0));
+                        videoEdit = { source: filename, duration: total, start: 0, end: Math.min(total, 149),
+                            width: Number(d.width || 0), height: Number(d.height || 0) };
+                        // Match the source aspect and use up to a practical 2K
+                        // H3 canvas. Final output is fitted to source dimensions.
+                        if (videoEdit.width && videoEdit.height) {
+                            let gw = videoEdit.width, gh = videoEdit.height;
+                            const maxPixels = 2048 * 1152;
+                            if (gw * gh > maxPixels) { const k = Math.sqrt(maxPixels / (gw * gh)); gw *= k; gh *= k; }
+                            gw = Math.max(32, Math.round(gw / 32) * 32); gh = Math.max(32, Math.round(gh / 32) * 32);
+                            const ratio = gw / gh;
+                            aspect = ratio > 1.2 ? "16:9" : ratio < .83 ? "9:16" : "1:1";
+                            if ($("aspect")) [...$("aspect").children].forEach(x => x.classList.toggle("on", x.dataset.a === aspect));
+                            let ri = RES[aspect].findIndex(r => r[0] === gw && r[1] === gh);
+                            if (ri < 0) { RES[aspect].push([gw, gh, "fuente"]); ri = RES[aspect].length - 1; }
+                            resIdx = ri; renderRes();
+                        }
+                        const selectedSecs = videoEdit.end - videoEdit.start;
+                        if ($("durMin")) $("durMin").value = Math.floor(selectedSecs / 60);
+                        if ($("durSec")) $("durSec").value = Math.round((selectedSecs % 60) * 10) / 10;
+                        syncDur();
+                        // Semantic video edit: video frames and extracted audio
+                        // both enter the dedicated Ref2VA checkpoint as model inputs.
+                        try {
+                            const ad = await requestPreparedReference(filename, "audio");
+                            exactAudio = { name: ad.name, label: "Audio original · " + d.name, duration: Number(ad.duration || d.duration || 0), disabled: false, outputMode: "original" };
+                            if (exactAudio.duration > 0) {
+                                const secs = Math.max(.1, videoEdit.end - videoEdit.start);
+                                if ($("durMin")) $("durMin").value = Math.floor(secs / 60);
+                                if ($("durSec")) $("durSec").value = secs % 60;
+                                syncDur();
+                            }
+                        } catch (audioErr) {
+                            exactAudio = null;
+                            refVideoAudio = false;
+                            toast("El video no tiene audio utilizable; editaré solo la imagen.");
+                        }
+                    } else videoEdit = null;
+                }
+                setMode("ref"); renderRefs(); renderAttachBar();
+                if (edit) {
+                    setOutputType(kind);
+                    if ($("prompt")) {
+                        $("prompt").value = "";
+                        $("prompt").placeholder = kind === "video"
+                            ? "Describe solo el cambio: cambia el vestido a azul, reemplaza el teléfono por la banana, o reencuadra en primerísimo plano solamente sus labios…"
+                            : `Describe qué quieres cambiar en ${kind === "image" ? "esta imagen" : "este audio"}…`;
+                        $("prompt").focus();
+                    }
+                    toast(`✦ ${kind === "image" ? "Imagen" : kind === "audio" ? "Audio" : "Video"} listo para editar · escribe el cambio`);
+                } else {
+                    if ($("prompt")) $("prompt").focus();
+                    toast("✓ Añadido como referencia");
+                }
+                saveComposer(); closeLibrary();
+            } catch (e) { showError(e.message); }
+        }
+        async function useLibraryReference(it, edit) {
+            const kind = it.mode === "audio_only" ? "audio" : it.mode === "image_only" ? "image" : "video";
+            return prepareReference(it.filename, kind, edit);
         }
 
         // Repuebla el compositor con el setup exacto de un video (Recrear con este setup).
@@ -1856,8 +2813,18 @@
             // aceleradores (si el video los guardó)
             if (s.turbo != null) { turbo = s.turbo; setChipUI("turbobox", "t", turbo); }
             if (s.turbo_lora != null) { turboLora = s.turbo_lora ? "on" : "off"; setChipUI("turboloraBox", "tl", turboLora); }
-            if (s.spectrum != null) { spectrum = s.spectrum ? "on" : "off"; setChipUI("spectrumBox", "sp", spectrum); }
-            if (s.mem_factor !== undefined) { memBoost = s.mem_factor ? "on" : "off"; setChipUI("membox", "m", memBoost); }
+            if (s.turbo_4 != null) { turbo4 = s.turbo_4 ? "on" : "off"; setChipUI("turbo4Box", "t4", turbo4); }
+            spectrum = "off";
+            if (s.mem_factor !== undefined) {
+                maxVram = Number(s.mem_factor) === 0.08 ? "on" : "off";
+                memBoost = (s.mem_factor && maxVram === "off") ? "on" : "off";
+                setChipUI("membox", "m", memBoost); setChipUI("maxVramBox", "mv", maxVram);
+            }
+            if (s.compile_vae !== undefined) { compileVae = s.compile_vae ? "on" : "off"; setChipUI("compileVaeBox", "cv", compileVae); }
+            if (s.vae_int8 !== undefined) { vaeInt8 = s.vae_int8 ? "on" : "off"; setChipUI("vaeInt8Box", "vi", vaeInt8); }
+            firstBlock = s.firstblock || "off";
+            offloadProfile = Number(s.offload_profile || 2);
+            activeQuickProfile = Number(s.quick_profile || 0); paintQuickProfiles();
             if (s.steps != null) { steps = s.steps; setChipUI("stepsbox", "s", steps); }
             if (s.upscale != null) { upscale = s.upscale; setChipUI("upscalebox", "u", upscale); }
             updateEta();
@@ -2079,8 +3046,11 @@
 
         // Inicialización
         if ($("newChatBtn")) $("newChatBtn").onclick = () => newChat();
-        if ($("prompt")) $("prompt").addEventListener("input", () => saveComposer());
-        bindFile(); renderRes(); syncDur(); updateEta(); renderProjName(); loadProjects(); loadLibrary();
+        if ($("prompt")) $("prompt").addEventListener("input", () => { if (outputKind === "audio") audioDurationFromPrompt(false); saveComposer(); });
+        bindFile(); renderRes(); renderQuickAspects(); paintImageCapture(); loadImageHistory(); syncDur(); paintQuickProfiles(); updateEta(); renderProjName(); loadProjects(); loadLibrary();
+        requestAnimationFrame(syncComposerClearance);
+        if (window.ResizeObserver) new ResizeObserver(syncComposerClearance).observe(document.querySelector("footer"));
+        window.addEventListener("resize", syncComposerClearance);
         restoreComposer();  // recupera prompt + referencias si refrescaste la página
     </script>
 </body>

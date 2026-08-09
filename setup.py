@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Rey Josias Reinoso
 """Interactive, machine-local setup for MiniMax H3 Local AI Studio."""
 from __future__ import annotations
 

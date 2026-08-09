@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Rey Josias Reinoso
 """
 MiniMax H3 Studio — standalone web UI for creating videos with MiniMax H3,
 driving a local ComfyUI instance. Standard library only.

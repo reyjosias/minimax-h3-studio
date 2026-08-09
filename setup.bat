@@ -1,4 +1,6 @@
 @echo off
+REM SPDX-License-Identifier: AGPL-3.0-or-later
+REM Copyright (C) 2026 Rey Josias Reinoso
 title Configurar MiniMax H3 Local AI Studio
 cd /d "%~dp0"
 where py >nul 2>&1

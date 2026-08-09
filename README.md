@@ -188,4 +188,18 @@ Issues, test results, suggestions and pull requests are welcome. Please include 
 
 ## License
 
-[MIT](LICENSE) © 2026 Rey Josias Reinoso
+Copyright © 2026 **Rey Josias Reinoso**.
+
+Current and future releases are licensed under
+**[GNU AGPL-3.0-or-later](LICENSE)**. If you modify the Studio and let users
+interact with it over a network, those users must be offered the corresponding
+source code as required by the AGPL.
+
+Organizations that need closed-source distribution, proprietary integration or
+hosted deployment without AGPL obligations can request a separate
+[commercial license](COMMERCIAL-LICENSING.md).
+
+The historical repository through commit `5c8b913` was released under MIT;
+rights already granted for those historical copies remain valid. See
+[NOTICE](NOTICE), [TRADEMARKS.md](TRADEMARKS.md), [CONTRIBUTING.md](CONTRIBUTING.md)
+and [CLA.md](CLA.md).

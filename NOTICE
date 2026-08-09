@@ -1,0 +1,18 @@
+MiniMax H3 Local AI Studio
+Copyright (C) 2026 Rey Josias Reinoso
+
+Current and future releases that identify themselves as AGPL-3.0-or-later are
+licensed under the GNU Affero General Public License v3.0 or any later version.
+See LICENSE.
+
+Repository history through commit 5c8b913 was previously made available under
+the MIT License. Rights already granted for those historical copies remain in
+effect. New contributions and later releases are governed by their stated
+license.
+
+MiniMax H3 model weights, ComfyUI, custom nodes, FFmpeg, Tailwind CSS and other
+third-party components are separate works and retain their respective licenses,
+copyrights and terms. Model weights are not distributed by this repository.
+
+Project author and commercial licensing contact:
+Rey Josias Reinoso — https://x.com/reyreinoso

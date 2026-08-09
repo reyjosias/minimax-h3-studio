@@ -1,4 +1,6 @@
 @echo off
+REM SPDX-License-Identifier: AGPL-3.0-or-later
+REM Copyright (C) 2026 Rey Josias Reinoso
 title Local AI Studio
 cd /d "%~dp0"
 if not exist "studio_config.json" (

@@ -1,60 +1,82 @@
 #!/usr/bin/env python3
-"""
-One-click launcher for MiniMax H3 Studio.
-
-Starts the ComfyUI server (headless, pointed at the shared model folder) if it
-isn't already running, opens the Studio in the browser, then runs the Studio
-web server. Close this window to stop the Studio; ComfyUI keeps running.
-"""
+"""Portable one-click launcher for Local AI Studio."""
+import json
 import os
 import subprocess
+import sys
 import threading
 import time
 import urllib.request
 import webbrowser
 
-COMFY = "http://127.0.0.1:8188"
-STUDIO = "http://127.0.0.1:8199"
-COMFY_DIR = r"C:\Users\Rey\ComfyUI-Installs\Rey (1)"
-VENV_PY = r"C:\Users\Rey\ComfyUI-Installs\Rey (1)\ComfyUI\.venv\Scripts\python.exe"
-YAML = r"C:\Users\Rey\AppData\Roaming\Comfy Desktop\shared_model_paths.yaml"
-OUT = r"C:\Users\Rey\ComfyUI-Shared\output"
-INP = r"C:\Users\Rey\ComfyUI-Shared\input"
+HERE = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.environ.get("STUDIO_CONFIG", os.path.join(HERE, "studio_config.json"))
+
+
+def load_config():
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
 
 
 def up(url):
     try:
-        urllib.request.urlopen(url, timeout=3)
+        urllib.request.urlopen(url, timeout=3).close()
         return True
-    except Exception:  # noqa
+    except Exception:
         return False
 
 
 def main():
-    if up(COMFY + "/system_stats"):
-        print("ComfyUI ya estaba abierto.")
+    cfg = load_config()
+    if not cfg:
+        print("No existe studio_config.json. Ejecuta setup.bat una vez.")
+        input("Pulsa Enter para cerrar...")
+        return 1
+
+    comfy = os.environ.get("COMFY_URL", cfg.get("comfy_url", "http://127.0.0.1:8188"))
+    port = str(os.environ.get("PORT", cfg.get("studio_port", 8200)))
+    studio = f"http://127.0.0.1:{port}/new"
+    os.environ.update({
+        "STUDIO_CONFIG": CONFIG_PATH,
+        "COMFY_URL": comfy,
+        "PORT": port,
+    })
+
+    if up(comfy + "/system_stats"):
+        print("ComfyUI ya esta abierto.")
     else:
-        print("Iniciando ComfyUI (headless)…")
-        args = [VENV_PY, "-s", "ComfyUI\\main.py",
-                "--extra-model-paths-config", YAML,
-                "--input-directory", INP, "--output-directory", OUT]
+        comfy_dir = cfg.get("comfy_dir", "")
+        python = cfg.get("python", sys.executable)
+        main_py = os.path.join(comfy_dir, "main.py")
+        if not os.path.isfile(main_py):
+            print("No encuentro ComfyUI. Ejecuta setup.bat y corrige su ruta.")
+            return 1
+        args = [python, main_py, "--listen", "127.0.0.1", "--port", comfy.rsplit(":", 1)[-1],
+                "--input-directory", cfg["input_dir"], "--output-directory", cfg["output_dir"]]
+        extra = cfg.get("extra_model_paths")
+        if extra and os.path.isfile(extra):
+            args += ["--extra-model-paths-config", extra]
+        streams = str(cfg.get("async_offload", 2))
+        if streams != "0":
+            args += ["--async-offload", streams]
+        print("Iniciando ComfyUI...")
         flags = subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0
-        try:
-            subprocess.Popen(args, cwd=COMFY_DIR, creationflags=flags)
-        except Exception as e:  # noqa
-            print("No pude iniciar ComfyUI automáticamente:", e)
-            print("Abre ComfyUI a mano y vuelve a ejecutar esto.")
-        for _ in range(120):
-            if up(COMFY + "/system_stats"):
+        subprocess.Popen(args, cwd=comfy_dir, creationflags=flags)
+        for _ in range(180):
+            if up(comfy + "/system_stats"):
                 break
             time.sleep(2)
-        print("ComfyUI listo." if up(COMFY + "/system_stats")
-              else "Aviso: ComfyUI no respondió aún; el Studio esperará a que arranque.")
+        else:
+            print("ComfyUI no respondio. Revisa su consola antes de generar.")
 
-    threading.Timer(2.5, lambda: webbrowser.open(STUDIO)).start()
+    threading.Timer(2.0, lambda: webbrowser.open(studio)).start()
     import server
     server.main()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,0 +1,12 @@
+{
+  "comfy_url": "http://127.0.0.1:8188",
+  "studio_port": 8200,
+  "comfy_dir": "C:\\path\\to\\ComfyUI",
+  "python": "C:\\path\\to\\ComfyUI\\.venv\\Scripts\\python.exe",
+  "model_dir": "C:\\path\\to\\ComfyUI\\models",
+  "input_dir": "C:\\path\\to\\ComfyUI\\input",
+  "output_dir": "C:\\path\\to\\ComfyUI\\output",
+  "ffmpeg": "ffmpeg",
+  "ffprobe": "ffprobe",
+  "async_offload": 2
+}

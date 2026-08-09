@@ -1,160 +1,191 @@
-# 🎬 MiniMax H3 Studio
+# MiniMax H3 Local AI Studio
 
-**A standalone, local web app for AI video + audio generation — a clean chat-style front end that drives your own [ComfyUI](https://github.com/comfyanonymous/ComfyUI) running the [MiniMax H3](https://huggingface.co/MiniMaxAI) omni model.**
+**A standalone local creator for MiniMax H3 video, audio and images, powered by your own ComfyUI.** No cloud account, subscription or remote rendering: prompts, references, generations and the personal library stay on your machine.
 
-No cloud, no login, no subscriptions. Everything runs on your machine and your GPU. You type a prompt, it generates a video **with synced audio**, saves it to a local SQLite library, and lets you organize, extend, upscale and stitch clips — all from one page.
-
-> _Una app local para generar video + audio con IA sobre tu propio ComfyUI. Sin nube, sin cuentas, todo en tu máquina._
+> Estudio local para crear y editar video con audio, imágenes y audio usando MiniMax H3 sobre ComfyUI. Todo se ejecuta en tu PC.
 
 <p align="center">
-  <img src="assets/screenshot.png" alt="MiniMax H3 Studio — chat-style creator with a generated video, projects, and one-click accelerators" width="100%">
+  <img src="assets/screenshot.png" alt="MiniMax H3 Local AI Studio" width="100%">
 </p>
 
----
+## Samples
 
-## 🎥 Samples
+| Native 25-second video + audio | Native ~2.5K video |
+|---|---|
+| [![Play native 25-second sample](samples/poster-25s.jpg)](samples/sample-25s-native.mp4) | [![Play native 2.5K sample](samples/poster-2.5k.jpg)](samples/sample-2.5k.mp4) |
+| **[▶ Play MP4](samples/sample-25s-native.mp4)** | **[▶ Play MP4](samples/sample-2.5k.mp4)** |
 
-<table>
-<tr>
-<td width="50%" align="center">
+The MP4 files are stored in the repository so they can be opened outside the Studio.
 
-[![25-second native generation](samples/poster-25s.jpg)](samples/sample-25s-native.mp4)
+## What it can do
 
-**▶ [25-second native generation](samples/sample-25s-native.mp4)**<br>
-Single clip at 25 s native length (video + audio, no stitching).
+### Create
 
-</td>
-<td width="50%" align="center">
+- Text-to-video and image-to-video with native synchronized stereo audio.
+- First-frame and last-frame guidance.
+- Reference-to-video with one or several images, video and audio references.
+- Audio-only generation with a dedicated player and MP3 download.
+- Image-only generation at 1K, 2K or experimental 4K capture; choose first, middle or last frame, or extract three candidates.
+- Many aspect ratios: 16:9, 9:16, 1:1, 2.35:1, 21:9, 2:1, 4:3, 3:2, 2:3, 5:4 and 4:5.
+- Native video lengths entered as minutes and seconds, up to the H3 node limit (long jobs are experimental and expensive).
+- Native resolutions through 2K/2.5K experiments. High resolutions may exceed 24 GB VRAM depending on duration and acceleration settings.
 
-[![2.5K native generation](samples/poster-2.5k.jpg)](samples/sample-2.5k.mp4)
+### Audio-conditioned video
 
-**▶ [2.5K native generation](samples/sample-2.5k.mp4)**<br>
-Clip generated at ~2.5K native resolution.
+- **Original clean audio:** H3 receives the complete source soundtrack as conditioning and generates visuals synchronized to it. The source waveform is then attached unchanged, avoiding doubled or distorted sound.
+- **Reference + ambience:** uses H3 Ref2VA `partially_copy` semantics. It preserves speech, singing, music, effects and timing while allowing the prompt to add requested ambience, performances or sounds.
+- The source can be speech, music, singing, effects, ambience, or a combination—not voice only.
 
-</td>
-</tr>
-</table>
+### Native H3 video editing
 
-_Click a thumbnail to play._
+- Edit an existing video by text: change clothing color, lighting, time of day, objects or scene attributes while preserving continuity.
+- Combine video + image references for targeted replacement or attribute transfer.
+- Camera recomposition: close-up, extreme close-up, frame only the lips, crop, focus, viewpoint, angle or shot-size changes.
+- Edit only a selected time interval. The Studio sends that segment to H3, then splices it back into the untouched source at the original timing.
+- Preserve the original source audio during visual edits, or condition on another audio track.
+- Structured `<Video 1>`, `<Picture n>` and `<Audio n>` reference prompts are assembled automatically.
 
----
+### Work like a studio
 
-## ✨ Features
+- Minimal chat composer with persistent attachments, disable/enable toggles and a **New** reset.
+- Video, image and audio outputs each have the correct preview, actions and download type.
+- Projects with separate libraries; **Master** shows every project.
+- Real progress, elapsed time, live ETA, cancel and process pause; state survives page refresh.
+- Sequential queue: keep viewing a completed result while the next item continues generating.
+- **Recreate with this setup** restores prompt, dimensions, duration, seed and accelerators.
+- **Creative Space:** large player, continuous clip timeline, add/extend from chat and export the joined result.
+- Extract a video frame or soundtrack and immediately use it as a new reference.
 
-- **Chat-style creator** (`/new`) — black canvas + bottom composer. Write a prompt, get a video with audio.
-- **Text-to-video, image-to-video, and reference** modes — plus **first frame** and **last frame** control.
-- **Native duration in min:sec** — push the model toward its native length (up to the node's max), no post-stitching.
-- **Native resolutions up to 2K / "4K"** — force higher resolutions to test what the model allows (with live time estimates).
-- **Projects** — each project is its own library; a **Master** library shows them all. Move any video between projects.
-- **🎬 Espacio Creativo** — a continuity editor: one big preview on top, a continuous timeline of clips below, **＋ new segment** / **⇢ extend** driven from the chat, proportional filmstrip + playhead, and **export the whole joined video**.
-- **♻ Recreate with this setup** — every library video remembers its full setup (prompt, resolution, duration, seed, accelerators) and repopulates the composer in one click.
-- **Background queue** — queue several videos; a finished one stays on screen while the next generates, with a live "⏳ Generando video…" pill.
-- **Local upscaling (VSR)** and **RIFE frame interpolation** (48 / 72 fps) straight from the library.
-- **Honest crash detection** — if ComfyUI runs out of VRAM and dies, the app tells you the truth instead of a fake 90%.
+### Local post-processing
 
-### ⚡ Speed accelerators (stackable, one-click)
+- FlashVSR fast/quality upscaling.
+- RIFE 48 fps and 72 fps frame interpolation while retaining duration and audio.
+- Image frame extraction and MP3 export.
 
-| Accelerator | What it does | Notes |
-|---|---|---|
-| **Turbo LoRA** (4–8 steps) | Distilled LoRA + dedicated turbo sampler | The big, **stable** win (e.g. ~35 min → ~8 min at 768p on a 3090). On by default. |
-| **Menos offload** (mem factor) | Keeps more of the model resident in VRAM | Helps short clips; auto-disabled on heavy configs. No quality change. |
-| **Sage + EasyCache** | SageAttention (Triton) + feature caching | Fast, but the Triton kernel is **unstable on large/long shapes** — **auto-disabled** on 2K/4K and long clips, kept for standard-res short clips. |
-| **Spectrum** | Chebyshev ridge forecasting that skips transformer evals | ~2× **only when compute-bound** (low res that fits VRAM). At 768p (offload-bound) it gives ~0 — use it for small clips. |
+### Optional acceleration
 
-The app is built so heavy configs try to **fit instead of crashing** ComfyUI: it snaps dimensions to /32, auto-drops the unstable accelerators when a job is too big for 24 GB, and reports honestly when the backend dies.
+- Six measured quick profiles (0–5) plus fully manual advanced controls.
+- Turbo LoRA with the dedicated 4–8-step sampler.
+- SageAttention + EasyCache.
+- Spectrum transformer forecasting.
+- MiniMax H3 FirstBlockCache.
+- Memory residency/offload profiles for 24 GB cards.
+- Optional INT8 video VAE and VAE compile paths.
+- Default quality workflow remains **20 steps**; reference/video-edit workflows use the official Ref2VA path and bypass incompatible Turbo batching automatically.
 
----
+Acceleration is hardware- and shape-dependent. A configuration that helps at 640×352 can provide little gain—or run out of memory—at 2K. The controls remain optional, and the Studio reports a real backend crash instead of leaving a fake progress bar at 90%.
 
-## 🧩 Requirements
+## Requirements
 
-- **ComfyUI** with the **MiniMax H3** model stack installed (the diffusion UNET, the Qwen-based text encoder, and the video + audio VAEs). This app does **not** ship the models.
-- **Python 3.10+** (standard library only — the Studio server has **no pip dependencies**).
-- **ffmpeg / ffprobe** (for metadata + muxing).
-- A CUDA GPU. Developed and tuned on an **RTX 3090 (24 GB)**.
-- Optional custom nodes for the accelerators:
-  - [`ComfyUI-MiniMax-H3-Turbo`](https://github.com/larryvrh) — Turbo LoRA sampler.
-  - [`ComfyUI-Spectrum-MiniMax-H3`](https://github.com/xmarre) — Spectrum node.
-  - KJNodes (SageAttention patch) and the FlashVSR / RIFE nodes for upscaling & interpolation.
+- Windows 10/11 (the launcher and process pause controls are currently Windows-oriented).
+- Python 3.10+.
+- A working local [ComfyUI](https://github.com/Comfy-Org/ComfyUI) installation.
+- NVIDIA CUDA GPU. Developed and measured on an RTX 3090 24 GB with 128 GB RAM.
+- `ffmpeg` and `ffprobe`.
+- About **76 GB** for the recommended H3 INT8/Ref2VA stack and Turbo LoRA, plus space for outputs.
 
-### Models used (filenames the graphs expect)
+### Model files
 
+The setup wizard checks these locations under your ComfyUI model root and can download missing required/recommended files after showing the size and asking permission:
+
+```text
+diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors
+diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors
+text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors
+vae/minimax_h3_video_vae_fp16.safetensors
+vae/minimax_h3_audio_vae_fp32.safetensors
+loras/minimax_h3_turbo_4step_ckpt500.safetensors
 ```
-minimax_h3_fl2va_pruned_int8_convrot.safetensors   # UNET (max quality)
-minimax_h3_fl2va_pruned_int4_convrot.safetensors   # UNET (~11GB, fits VRAM = faster)
-qwen3vl_32b_minimax_h3_int8_convrot.safetensors    # text encoder
-minimax_h3_video_vae_fp16.safetensors              # video VAE
-minimax_h3_audio_vae_fp32.safetensors              # audio VAE
-minimax_h3_turbo_4step_ckpt500.safetensors         # Turbo LoRA (optional)
-rife_v4.26.safetensors                             # frame interpolation (optional)
+
+Optional measured profile:
+
+```text
+vae/minimax_h3_video_vae_int8_convrot.safetensors
 ```
 
----
+Primary model sources: [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3), [MiniMax H3 Turbo LoRA](https://huggingface.co/larryvrh/MiniMax-H3-Turbo-Lora), and the optional [Kijai experimental INT8 VAE](https://huggingface.co/Kijai/MiniMax-H3-experimental).
 
-## 🤖 New to ComfyUI? Let an AI set it up for you
+### Custom nodes
 
-The trickiest part isn't this app — it's installing **ComfyUI** and downloading the **MiniMax H3** model stack correctly. You don't have to do it alone:
+`setup.bat` can clone the optional node packages after confirmation:
 
-> **Hand this whole repo to an AI assistant like [Claude](https://claude.ai) (Claude Code is ideal) and ask it to guide you** — installing ComfyUI, downloading the MiniMax H3 models (UNET, text encoder, video + audio VAEs) into the right folders, wiring the shared model paths, and getting everything ready so the Studio just works.
+- [ComfyUI-MiniMax-H3-Turbo](https://github.com/larryvrh/ComfyUI-MiniMax-H3-Turbo)
+- [ComfyUI-Spectrum-MiniMax-H3](https://github.com/xmarre/ComfyUI-Spectrum-MiniMax-H3)
+- [ComfyUI-MiniMaxH3-FirstBlockCache](https://github.com/duckyshell/ComfyUI-MiniMaxH3-FirstBlockCache)
+- [ComfyUI-FlashVSR-Ultra-Fast](https://github.com/lihaoyun6/ComfyUI-FlashVSR_Ultra_Fast)
+- [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes)
+- [ComfyUI-Frame-Interpolation](https://github.com/Fannovel16/ComfyUI-Frame-Interpolation)
 
-A prompt that works well:
+Some compiled acceleration packages (especially Triton/SageAttention) vary by Python, Torch, CUDA and GPU. If their installation fails, install them from ComfyUI Manager or leave that accelerator off; the base Studio remains usable.
 
-> _"I want to run this repo (MiniMax H3 Studio). Walk me step by step: install ComfyUI, download the MiniMax H3 models listed in the README into the correct folders, install the optional accelerator custom nodes, and configure the paths in `server.py` / `launch.py` for my machine, until I can open the Studio and generate a video."_
+## Install on Windows
 
-> _¿Nuevo en ComfyUI? Pásale este repo a una IA como **Claude** y pídele que te guíe paso a paso: instalar ComfyUI, descargar los modelos MiniMax H3 en las carpetas correctas, y dejar todo listo para que la app funcione._
-
----
-
-## 🚀 Install & run
-
-```bash
+```powershell
 git clone https://github.com/reyjosias/minimax-h3-studio.git
 cd minimax-h3-studio
-python server.py            # serves the Studio on http://127.0.0.1:8199
+setup.bat
 ```
 
-Then open **http://127.0.0.1:8199/new**. Make sure ComfyUI is running on `http://127.0.0.1:8188` first.
+The wizard:
 
-**One-click (Windows):** `launch.py` / `start.bat` will start ComfyUI (if it isn't up), open the browser, and run the Studio. `reiniciar.bat` restarts the Studio, `apagar.bat` shuts it down.
+1. Detects an existing ComfyUI installation and its Python environment.
+2. Detects local/shared `models`, `input` and `output` folders.
+3. Finds `ffmpeg`/`ffprobe`.
+4. Writes private machine paths to `studio_config.json` (git-ignored).
+5. Verifies the H3 files and optionally downloads missing large weights with confirmation and resume support.
+6. Optionally installs the custom nodes.
 
-### Configuration
+Restart ComfyUI after setup, then run:
 
-The server reads a few environment variables and otherwise uses paths at the top of `server.py` / `launch.py`. **Edit these to match your machine:**
+```text
+start.bat
+```
 
-| Setting | Where | Default |
+Open **http://127.0.0.1:8200/new**. `reiniciar.bat` restarts only the Studio; `apagar.bat` stops it without killing ComfyUI.
+
+### Does cloning the repository configure ComfyUI automatically?
+
+**Not silently.** GitHub does not include the model weights or modify another application merely by cloning a repository. Run `setup.bat`: it performs the local path configuration and offers the large model/node installations explicitly. This prevents an unexpected ~76 GB download or changes to the wrong ComfyUI installation.
+
+If you are new to ComfyUI, give this repository to an AI coding assistant such as Claude or Codex and ask:
+
+> Install MiniMax H3 Local AI Studio from this repository. Run its setup wizard, verify ComfyUI on port 8188, put every listed model in the correct folder, install the optional nodes, restart ComfyUI, and confirm that `/new` opens without generating a test video.
+
+## Configuration
+
+`studio_config.json` is machine-local and never committed. Environment variables override it:
+
+| Variable | Purpose | Default |
 |---|---|---|
-| ComfyUI URL | `COMFY_URL` env / `server.py` | `http://127.0.0.1:8188` |
-| Studio port | `PORT` env / `server.py` | `8199` |
-| Output dir | `OUTPUT_DIR` in `server.py` | ComfyUI's `output/` |
-| Input dir | `INPUT_DIR` in `server.py` | ComfyUI's `input/` |
-| ffmpeg / ffprobe | `FFMPEG` / `FFPROBE` in `server.py` | *(set to your ffmpeg path)* |
-| ComfyUI dir / venv | `launch.py` | *(set to your ComfyUI install)* |
+| `COMFY_URL` | ComfyUI API | `http://127.0.0.1:8188` |
+| `PORT` | Studio web port | `8200` |
+| `COMFYUI_DIR` | ComfyUI root | setup-detected |
+| `COMFY_MODEL_DIR` | model root | setup-detected |
+| `COMFY_INPUT_DIR` | input folder | setup-detected |
+| `COMFY_OUTPUT_DIR` | output folder | setup-detected |
+| `FFMPEG` / `FFPROBE` | media binaries | PATH/setup-detected |
 
-The SQLite library (`studio.db`) is created automatically on first run and is **git-ignored** (it's your personal library).
+The personal SQLite library (`studio.db`), configuration, prompts and generated media are ignored by Git.
 
----
+## Support development
 
-## 🖥️ Hardware notes (why the accelerators behave the way they do)
+This project represents substantial independent development, hardware testing and model research by **Rey Josias Reinoso**. If it saves you time or helps your work, please consider supporting continued development:
 
-At **768p native** on a 24 GB 3090, generation is **offload-bound** — the ~20 GB model is streamed from RAM every step, so the bottleneck is memory bandwidth, not compute. That's why:
+<p align="center">
+  <a href="https://www.paypal.com/paypalme/rrjosias"><strong>❤️ Donate with PayPal</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://x.com/reyreinoso"><strong>Follow/contact @reyreinoso</strong></a>
+</p>
 
-- **Step reducers** (Turbo LoRA) help a lot — fewer full model passes = less streaming.
-- **Compute skippers** (Spectrum) help at **low resolution** (model fits VRAM, compute-bound) but ~nothing at 768p.
-- **SageAttention** is fast but its Triton kernel throws `illegal memory access` on large/long shapes on Ampere — hence the auto-off logic.
+Issues, test results, suggestions and pull requests are welcome. Please include GPU, VRAM, resolution, duration, profile and the relevant ComfyUI error when reporting a failure.
 
-The realistic next lever for 768p is **reducing offload** (int4 model that fits fully in VRAM) rather than skipping steps.
+## Privacy and security
 
----
+- The server binds to `127.0.0.1`; it is not exposed publicly by default.
+- No API key is required.
+- Generated files and the SQLite library remain local.
+- Model licenses and upstream custom-node licenses still apply.
 
-## 🙌 Author & contact
-
-Built by **Rey Josias Reinoso**.
-
-If this project helps you, or you have suggestions — or you'd like to **donate** to support the work — reach out on **X (Twitter): [@reyreinoso](https://x.com/reyreinoso)**.
-
-Contributions, issues and pull requests are welcome. 🙏
-
----
-
-## 📜 License
+## License
 
 [MIT](LICENSE) © 2026 Rey Josias Reinoso

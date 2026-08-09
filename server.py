@@ -9,11 +9,12 @@ tracks true per-node execution progress, exposed through /api/status. The
 browser just polls status — no browser websocket. Every finished video is
 recorded in SQLite with its real generation time.
 
-Run:  python server.py         (serve :8199, ComfyUI at :8188)
+Run:  python server.py         (serve :8200, ComfyUI at :8188)
 """
 import base64
 import json
 import os
+import re
 import shutil
 import socket
 import sqlite3
@@ -26,23 +27,40 @@ import urllib.error
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-COMFY = os.environ.get("COMFY_URL", "http://127.0.0.1:8188")
+HERE = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.environ.get("STUDIO_CONFIG", os.path.join(HERE, "studio_config.json"))
+try:
+    with open(CONFIG_PATH, "r", encoding="utf-8") as _config_file:
+        CONFIG = json.load(_config_file)
+except (OSError, ValueError):
+    CONFIG = {}
+
+
+def _setting(env_name, config_name, default):
+    """Environment variables override the machine-local setup file."""
+    return os.environ.get(env_name) or CONFIG.get(config_name) or default
+
+
+COMFY = _setting("COMFY_URL", "comfy_url", "http://127.0.0.1:8188")
 _host_port = COMFY.split("://", 1)[-1]
 COMFY_HOST = _host_port.split(":")[0]
 COMFY_PORT = int(_host_port.split(":")[1]) if ":" in _host_port else 8188
-PORT = int(os.environ.get("PORT", "8199"))
-HERE = os.path.dirname(os.path.abspath(__file__))
+PORT = int(_setting("PORT", "studio_port", "8200"))
 DB_PATH = os.path.join(HERE, "studio.db")
 
-FFMPEG = r"C:\pinokio\bin\ffmpeg-env\Library\bin\ffmpeg.exe"
-FFPROBE = r"C:\pinokio\bin\ffmpeg-env\Library\bin\ffprobe.exe"
-OUTPUT_DIR = r"C:\Users\Rey\ComfyUI-Shared\output"
-INPUT_DIR = r"C:\Users\Rey\ComfyUI-Shared\input"
+COMFY_DIR = os.path.abspath(_setting("COMFYUI_DIR", "comfy_dir", os.path.join(HERE, "ComfyUI")))
+FFMPEG = _setting("FFMPEG", "ffmpeg", shutil.which("ffmpeg") or "ffmpeg")
+FFPROBE = _setting("FFPROBE", "ffprobe", shutil.which("ffprobe") or "ffprobe")
+OUTPUT_DIR = os.path.abspath(_setting("COMFY_OUTPUT_DIR", "output_dir", os.path.join(COMFY_DIR, "output")))
+INPUT_DIR = os.path.abspath(_setting("COMFY_INPUT_DIR", "input_dir", os.path.join(COMFY_DIR, "input")))
+MODEL_DIR = os.path.abspath(_setting("COMFY_MODEL_DIR", "model_dir", os.path.join(COMFY_DIR, "models")))
 
 UNET = "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+UNET_REF = "minimax_h3_ref2va_pruned_int8_convrot.safetensors"
 UNET_INT4 = "minimax_h3_fl2va_pruned_int4_convrot.safetensors"  # 11GB, fits VRAM = no offload = faster
 CLIP = "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
 VAE_VIDEO = "minimax_h3_video_vae_fp16.safetensors"
+VAE_VIDEO_INT8 = "minimax_h3_video_vae_int8_convrot.safetensors"
 VAE_AUDIO = "minimax_h3_audio_vae_fp32.safetensors"
 
 # node id -> (band_start, band_end, label). Progress reflects the real pipeline.
@@ -315,8 +333,32 @@ def build_ref_graph(*, prompt, width, height, length, seed, steps=20,
     """
     ref_images = ref_images or []
     ref_audios = ref_audios or []
+    # H3 does not infer which attachment the prose refers to.  The official
+    # conditioning node exposes every reference to Qwen with explicit
+    # <Picture i> / <Video k> / <Audio j> tokens, so make those references
+    # explicit even when the user writes a natural-language prompt without tags.
+    reference_lines = []
+    for i in range(len(ref_images)):
+        tag = f"<Picture {i + 1}>"
+        if tag.lower() not in prompt.lower():
+            reference_lines.append(f"Use {tag} as a strict visual identity, appearance and style reference.")
+    audio_index = 1
+    if ref_video:
+        if "<video 1>" not in prompt.lower():
+            reference_lines.append("Use <Video 1> as the motion, subject and scene reference for the requested new video.")
+        if use_video_audio:
+            if "<audio 1>" not in prompt.lower():
+                reference_lines.append("Use <Audio 1> as the timing and soundtrack reference paired with <Video 1>.")
+            audio_index += 1
+    for _ in ref_audios:
+        tag = f"<Audio {audio_index}>"
+        if tag.lower() not in prompt.lower():
+            reference_lines.append(f"Use {tag} as the audio, rhythm, voice and timing reference.")
+        audio_index += 1
+    if reference_lines:
+        prompt = "\n".join(reference_lines) + "\n\nUSER REQUEST:\n" + prompt
     g = {
-        "6": {"class_type": "UNETLoader", "inputs": {"unet_name": UNET, "weight_dtype": "default"}},
+        "6": {"class_type": "UNETLoader", "inputs": {"unet_name": UNET_REF, "weight_dtype": "default"}},
         "13": {"class_type": "CLIPLoader", "inputs": {"clip_name": CLIP, "type": "minimax", "device": "default"}},
         "11": {"class_type": "VAELoader", "inputs": {"vae_name": VAE_VIDEO}},
         "24": {"class_type": "VAELoader", "inputs": {"vae_name": VAE_AUDIO}},
@@ -486,6 +528,30 @@ def apply_spectrum(g, on, steps=6):
     return g
 
 
+def apply_firstblock(g, mode):
+    """Optional MiniMax H3 FirstBlockCache profile. It must be attached to the
+    native model before SageAttention and cannot coexist with EasyCache."""
+    if mode not in ("safe", "fast", "aggressive") or "6" not in g:
+        return g
+    labels = {
+        "safe": "H3 Safe — 0.08 / max 2",
+        "fast": "H3 Fast — 0.10 / max 2",
+        "aggressive": "H3 Aggressive — 0.12 / max 2",
+    }
+    g["63"] = {
+        "class_type": "ApplyMiniMaxH3FirstBlockCache",
+        "inputs": {
+            "model": ["6", 0], "mode": labels[mode], "threshold": 0.10,
+            "start_percent": 0.10, "end_percent": 0.95,
+            "max_consecutive_hits": 2, "temporal_guard": False,
+        },
+    }
+    for nid in ("9", "16"):
+        if nid in g:
+            g[nid]["inputs"]["model"] = ["63", 0]
+    return g
+
+
 def apply_turbo(g, turbo):
     """Optional speed accelerators (user-activatable). Patches the diffusion
     MODEL with SageAttention (via KJNodes) and optionally EasyCache, then
@@ -500,14 +566,19 @@ def apply_turbo(g, turbo):
     # quantization uses custom kernels (comfy_kitchen) that torch Dynamo cannot
     # trace ("Cannot access data pointer of FakeTensor"), so any compile backend
     # fails at the sampler. Sage + EasyCache is the fastest quality-safe stack here.
-    last = "6"  # UNETLoader
+    # Start from the model currently feeding the scheduler. This lets a
+    # validated model patch (for example H3 FirstBlockCache) compose with Sage.
+    source = g.get("9", {}).get("inputs", {}).get("model", ["6", 0])
+    last = source[0]
+    last_output = source[1]
     if turbo == "cache":
         g["50"] = {"class_type": "EasyCache",
-                   "inputs": {"model": [last, 0], "reuse_threshold": 0.30,
+                   "inputs": {"model": [last, last_output], "reuse_threshold": 0.30,
                               "start_percent": 0.20, "end_percent": 0.90, "verbose": False}}
         last = "50"
+        last_output = 0
     g["51"] = {"class_type": "PathchSageAttentionKJ",
-               "inputs": {"model": [last, 0], "sage_attention": "auto", "allow_compile": False}}
+               "inputs": {"model": [last, last_output], "sage_attention": "auto", "allow_compile": False}}
     last = "51"
     if "9" in g:
         g["9"]["inputs"]["model"] = [last, 0]
@@ -536,6 +607,33 @@ def apply_mem(g, factor):
         for k, v in node.get("inputs", {}).items():
             if isinstance(v, list) and len(v) == 2 and v[0] == "6" and v[1] == 0:
                 node["inputs"][k] = ["40", 0]
+    return g
+
+
+def apply_compile_vae(g, on):
+    """Compile only the video VAE decoder. Hidden until native-2K warm A/B passes."""
+    if not on or "10" not in g or "11" not in g:
+        return g
+    g["65"] = {
+        "class_type": "TorchCompileVAE",
+        "inputs": {
+            "vae": ["11", 0],
+            "backend": "inductor",
+            "fullgraph": False,
+            "mode": "default",
+            "compile_encoder": False,
+            "compile_decoder": True,
+        },
+    }
+    g["10"]["inputs"]["vae"] = ["65", 0]
+    return g
+
+
+def apply_int8_vae(g, on):
+    """Swap only the MiniMax video VAE. The diffusion model and sampler stay
+    unchanged, so this accelerator is independent from Turbo LoRA/Sage/Cache."""
+    if on and "11" in g:
+        g["11"]["inputs"]["vae_name"] = VAE_VIDEO_INT8
     return g
 
 
@@ -618,6 +716,33 @@ def _ffprobe(path, entries, stream=True):
         return []
 
 
+def _extract_still(src, dst, position="last"):
+    """Extract frame 0/2/4 from H3's five-frame image container."""
+    position = position if position in ("first", "middle", "last") else "last"
+    frame_no = {"first": 0, "middle": 2, "last": 4}[position]
+    r = subprocess.run([FFMPEG, "-y", "-i", src, "-vf", f"select=eq(n\\,{frame_no})",
+                        "-vsync", "vfr", "-frames:v", "1", "-q:v", "2", dst],
+                       capture_output=True, timeout=60)
+    if r.returncode != 0 or not os.path.isfile(dst):
+        # Fallback for imported/non-five-frame containers.
+        r = subprocess.run([FFMPEG, "-y", "-sseof", "-0.04", "-i", src,
+                            "-frames:v", "1", "-q:v", "2", dst],
+                           capture_output=True, timeout=60)
+    return r.returncode == 0 and os.path.isfile(dst)
+
+
+def _extract_still_at(src, dst, seconds):
+    """Extract an exact visible playback moment for Video → Frame reference."""
+    try:
+        seconds = max(0.0, float(seconds))
+    except (TypeError, ValueError):
+        return False
+    r = subprocess.run([FFMPEG, "-y", "-ss", f"{seconds:.3f}", "-i", src,
+                        "-frames:v", "1", "-q:v", "2", dst],
+                       capture_output=True, timeout=60)
+    return r.returncode == 0 and os.path.isfile(dst)
+
+
 def _concat_extend(source_path, new_basename):
     """Concatenate the source video and the freshly generated continuation into
     one longer MP4 (re-encoded so mismatched encodes join cleanly). Returns
@@ -639,6 +764,81 @@ def _concat_extend(source_path, new_basename):
     except (ValueError, IndexError):
         frames = 0
     return final_basename, frames
+
+
+def _attach_clean_source_audio(generated_basename, audio_basename):
+    """Keep H3's audio-conditioned visuals but replace its regenerated audio
+    with the selected source track. The generated audio is never mixed in, so
+    there is no doubled voice, fighting ambience or phasey overlay.
+
+    Video is stream-copied. AAC sources are also stream-copied; other source
+    formats are converted once to high-bitrate AAC for reliable MP4 playback.
+    """
+    generated = os.path.join(OUTPUT_DIR, "video", os.path.basename(generated_basename))
+    source_audio = os.path.join(INPUT_DIR, os.path.basename(audio_basename))
+    if not os.path.isfile(generated):
+        raise RuntimeError("No encontré el video generado para conservar el audio original.")
+    if not os.path.isfile(source_audio):
+        raise RuntimeError("No encontré el audio original seleccionado.")
+    out_name = f"MiniMaxStudio_audio_limpio_{int(time.time())}_{uuid.uuid4().hex[:6]}.mp4"
+    out_path = os.path.join(OUTPUT_DIR, "video", out_name)
+    probe = subprocess.run([FFPROBE, "-v", "error", "-select_streams", "a:0",
+                            "-show_entries", "stream=codec_name", "-of", "default=nw=1:nk=1",
+                            source_audio], capture_output=True, text=True, timeout=25)
+    codec = (probe.stdout or "").strip().lower()
+    audio_codec = ["-c:a", "copy"] if codec == "aac" else ["-c:a", "aac", "-b:a", "320k"]
+    cmd = [FFMPEG, "-y", "-i", generated, "-i", source_audio,
+           "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy"] + audio_codec + [
+           "-shortest", "-movflags", "+faststart", out_path]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if r.returncode != 0 or not os.path.isfile(out_path) or os.path.getsize(out_path) <= 0:
+        raise RuntimeError((r.stderr or "ffmpeg no pudo conservar el audio original")[-400:])
+    return out_name
+
+
+def _splice_video_edit(source_basename, edited_basename, start, end):
+    """Replace only [start,end] in a source video with H3's edited segment.
+    Everything outside the selection comes from the source. The source audio is
+    kept as one continuous track, avoiding seams, duplicated sound or drift.
+    Returns (basename, frames, width, height, seconds).
+    """
+    source = os.path.join(OUTPUT_DIR, "video", os.path.basename(source_basename))
+    edited = os.path.join(OUTPUT_DIR, "video", os.path.basename(edited_basename))
+    if not os.path.isfile(source) or not os.path.isfile(edited):
+        raise RuntimeError("No encontré el video fuente o el tramo editado.")
+    dims = _ffprobe(source, "stream=width,height")
+    width = int(dims[0]) if len(dims) >= 2 else 0
+    height = int(dims[1]) if len(dims) >= 2 else 0
+    dur = _ffprobe(source, "format=duration", stream=False)
+    total = float(dur[0]) if dur else 0.0
+    start = max(0.0, min(total, float(start or 0)))
+    end = max(start + 0.05, min(total, float(end or total)))
+    if start <= 0.03 and end >= total - 0.03:
+        return os.path.basename(edited_basename), int(round(total * 24)), width, height, total
+
+    width = max(2, width - width % 2); height = max(2, height - height % 2)
+    seg = end - start
+    parts, labels = [], []
+    if start > 0.03:
+        parts.append(f"[0:v]trim=0:{start:.6f},setpts=PTS-STARTPTS,fps=24,scale={width}:{height}:flags=lanczos[vpre]")
+        labels.append("[vpre]")
+    parts.append(f"[1:v]trim=duration={seg:.6f},setpts=PTS-STARTPTS,fps=24,scale={width}:{height}:flags=lanczos,"
+                 f"tpad=stop_mode=clone:stop_duration=1,trim=duration={seg:.6f}[vedit]")
+    labels.append("[vedit]")
+    if end < total - 0.03:
+        parts.append(f"[0:v]trim=start={end:.6f},setpts=PTS-STARTPTS,fps=24,scale={width}:{height}:flags=lanczos[vpost]")
+        labels.append("[vpost]")
+    parts.append("".join(labels) + f"concat=n={len(labels)}:v=1:a=0[v]")
+    out_name = f"MiniMaxStudio_videoedit_{int(time.time())}_{uuid.uuid4().hex[:6]}.mp4"
+    out_path = os.path.join(OUTPUT_DIR, "video", out_name)
+    cmd = [FFMPEG, "-y", "-i", source, "-i", edited, "-filter_complex", ";".join(parts),
+           "-map", "[v]", "-map", "0:a:0?", "-c:v", "libx264", "-crf", "16",
+           "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "copy",
+           "-t", f"{total:.6f}", "-movflags", "+faststart", out_path]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    if r.returncode != 0 or not os.path.isfile(out_path) or os.path.getsize(out_path) <= 0:
+        raise RuntimeError((r.stderr or "ffmpeg no pudo unir el tramo editado")[-500:])
+    return out_name, int(round(total * 24)), width, height, total
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -699,7 +899,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/audio":
             return self._audio(self._qs("name"))
         if path == "/api/frame":
-            return self._frame(self._qs("name"))
+            return self._frame(self._qs("name"), self._qs("pos", "last"))
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -724,6 +924,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._move_project(raw)
         if path == "/api/timeline":
             return self._timeline(raw)
+        if path == "/api/prepare-reference":
+            return self._prepare_reference(raw)
+        if path == "/api/replace-audio":
+            return self._replace_audio(raw)
         if path == "/api/upload":
             return self._upload(raw)
         if path == "/api/cancel":
@@ -745,6 +949,7 @@ class Handler(BaseHTTPRequestHandler):
             prompt = str(body.get("prompt", "")).strip()
             if not prompt:
                 return self._send(400, {"error": "Escribe un prompt."})
+            user_prompt = prompt
             # MiniMax H3 samples on a latent patchified by 2 over a /16 VAE, so
             # width & height MUST be divisible by 32 — otherwise the sampler
             # reshape fails ("shape ... invalid for input of size ..."), which
@@ -752,13 +957,63 @@ class Handler(BaseHTTPRequestHandler):
             width = max(32, int(round(int(body.get("width", 848)) / 32.0)) * 32)
             height = max(32, int(round(int(body.get("height", 480)) / 32.0)) * 32)
             seconds = float(body.get("seconds", 4))
+            video_edit = bool(body.get("video_edit"))
+            video_edit_source = os.path.basename(str(body.get("video_edit_source") or "")) or None
+            video_edit_start = 0.0
+            video_edit_end = 0.0
+            video_edit_total = 0.0
+            video_edit_width = 0
+            video_edit_height = 0
+            if video_edit:
+                source_path = os.path.join(OUTPUT_DIR, "video", video_edit_source or "")
+                if not video_edit_source or not os.path.isfile(source_path):
+                    return self._send(404, {"error": "No encontré el video fuente que quieres editar."})
+                vd = _ffprobe(source_path, "format=duration", stream=False)
+                video_edit_total = float(vd[0]) if vd else 0.0
+                dims = _ffprobe(source_path, "stream=width,height")
+                video_edit_width = int(dims[0]) if len(dims) >= 2 else width
+                video_edit_height = int(dims[1]) if len(dims) >= 2 else height
+                video_edit_start = max(0.0, min(video_edit_total, float(body.get("video_edit_start") or 0)))
+                video_edit_end = max(video_edit_start + 0.1,
+                                     min(video_edit_total, float(body.get("video_edit_end") or video_edit_total)))
+                video_edit_end = min(video_edit_end, video_edit_start + 149.0)
+                seconds = video_edit_end - video_edit_start
+            exact_audio = os.path.basename(str(body.get("exact_audio") or "")) or None
+            exact_audio_output = str(body.get("exact_audio_output") or "original").lower()
+            if exact_audio_output not in ("original", "reference"):
+                exact_audio_output = "original"
+            if exact_audio:
+                exact_path = os.path.join(INPUT_DIR, exact_audio)
+                if not os.path.isfile(exact_path):
+                    return self._send(404, {"error": "El audio seleccionado para Audio→Video ya no existe en la carpeta de entrada."})
+                # "Generar desde este audio" follows the reference soundtrack
+                # duration so H3 conditions the complete visual timeline on it.
+                if body.get("exact_audio_duration", True) and not video_edit:
+                    adur = _ffprobe(exact_path, "format=duration", stream=False)
+                    try:
+                        if adur and float(adur[0]) > 0:
+                            seconds = min(150.0, float(adur[0]))
+                    except (ValueError, IndexError):
+                        pass
             length = frames_for_seconds(seconds)
             steps = max(4, min(40, int(body.get("steps") or 20)))
+            requested_steps = steps
             turbo_lora = bool(body.get("turbo_lora"))
+            turbo_4 = bool(body.get("turbo_4"))
+            vae_int8 = bool(body.get("vae_int8"))
+            # TorchCompileVAE and the ConvRot VAE patch the same module buffers.
+            # They are both useful independently, but combining them corrupts the
+            # patcher's buffer restore path. Prefer the larger, no-warmup INT8 gain.
+            compile_vae = bool(body.get("compile_vae")) and not vae_int8
+            if turbo_4:
+                turbo_lora = True
+                steps = 4
             # Audio-only (prueba interna): genera a resolución mínima (imagen ~0 esfuerzo)
             # para obtener SOLO el audio en segundos; el mp3 se extrae vía /api/audio.
             audio_only = bool(body.get("audio_only"))
             if audio_only:
+                # Audio mode is intentionally fixed at 64×64: 32×32 showed no
+                # measurable speed gain on this installation.
                 width = height = 64
             # Image-only (prueba interna): genera el MÍNIMO de frames (5) a la
             # resolución elegida (1K/2K) → sale en segundos; nos quedamos con 1 frame
@@ -766,29 +1021,187 @@ class Handler(BaseHTTPRequestHandler):
             image_only = bool(body.get("image_only"))
             if image_only:
                 length = 5  # longitud mínima válida del nodo H3 (≡5 mod 17)
+                seconds = 5 / 48.0
             if turbo_lora:
                 steps = max(4, min(8, steps))  # Turbo LoRA is trained for 4-8 steps
             seed = int(body.get("seed") or uuid.uuid4().int % 2147483647)
             mode = body.get("mode", "t2v")
+            if exact_audio:
+                mode = "ref"
             if mode == "ref":
+                ref_model_path = os.path.join(MODEL_DIR, "diffusion_models", UNET_REF)
+                if not os.path.isfile(ref_model_path):
+                    return self._send(503, {"error": "El modelo oficial H3 Ref2VA todavía se está descargando. Espera a que termine antes de usar referencias."})
                 ref_images = [os.path.basename(str(x)) for x in (body.get("ref_images") or []) if x]
                 ref_video = os.path.basename(str(body.get("ref_video"))) if body.get("ref_video") else None
                 ref_audios = [os.path.basename(str(x)) for x in (body.get("ref_audios") or []) if x]
+                use_video_audio = bool(body.get("ref_video_audio", True))
+                original_exact_audio = exact_audio
+                if video_edit:
+                    if not ref_video or not os.path.isfile(os.path.join(INPUT_DIR, ref_video)):
+                        return self._send(400, {"error": "La edición H3 necesita el video fuente como <Video 1>."})
+                    # A temporal edit sends only the selected interval to H3,
+                    # making a short correction much faster than regenerating
+                    # the complete source. The finished interval is spliced back
+                    # into the untouched source in _status().
+                    if video_edit_start > 0.03 or video_edit_end < video_edit_total - 0.03:
+                        edit_ref = f"h3edit_video_{uuid.uuid4().hex[:10]}.mp4"
+                        rr = subprocess.run([FFMPEG, "-y", "-ss", f"{video_edit_start:.6f}",
+                                             "-i", os.path.join(INPUT_DIR, ref_video),
+                                             "-t", f"{seconds:.6f}", "-map", "0:v:0", "-an",
+                                             "-c:v", "libx264", "-crf", "16", "-preset", "veryfast",
+                                             "-pix_fmt", "yuv420p", os.path.join(INPUT_DIR, edit_ref)],
+                                            capture_output=True, text=True, timeout=900)
+                        if rr.returncode != 0 or not os.path.isfile(os.path.join(INPUT_DIR, edit_ref)):
+                            return self._send(500, {"error": "No pude preparar el tramo del video: " + (rr.stderr or "")[-300:]})
+                        ref_video = edit_ref
+                        if exact_audio:
+                            edit_audio = f"h3edit_audio_{uuid.uuid4().hex[:10]}.wav"
+                            ar = subprocess.run([FFMPEG, "-y", "-ss", f"{video_edit_start:.6f}",
+                                                 "-i", os.path.join(INPUT_DIR, exact_audio),
+                                                 "-t", f"{seconds:.6f}", "-vn", "-ar", "48000", "-ac", "2",
+                                                 "-c:a", "pcm_s16le", os.path.join(INPUT_DIR, edit_audio)],
+                                                capture_output=True, text=True, timeout=300)
+                            if ar.returncode != 0 or not os.path.isfile(os.path.join(INPUT_DIR, edit_audio)):
+                                return self._send(500, {"error": "No pude preparar el audio del tramo: " + (ar.stderr or "")[-300:]})
+                            exact_audio = edit_audio
+                            ref_audios = [x for x in ref_audios if x != original_exact_audio]
+                # Both output modes feed the selected waveform to H3 as its own
+                # <Audio 1> conditioning block. When a reference video is also
+                # present, do not condition on its soundtrack a second time;
+                # its frames remain <Video 1> and this audio drives the timeline.
+                if exact_audio:
+                    use_video_audio = False
+                    ref_audios = [exact_audio] + [x for x in ref_audios if x != exact_audio]
                 if not (ref_images or ref_video or ref_audios):
                     return self._send(400, {"error": "Añade al menos una referencia (imagen, video o audio)."})
+                # MiniMaxH3TurboLoRA's injected AdaLN assumes the normal
+                # conditioning batch. Reference→Video adds image, audio and/or
+                # video conditioning, which causes its known 3-vs-2 tensor
+                # error. Keep Sage/EasyCache; only bypass this incompatible LoRA.
+                if turbo_lora:
+                    turbo_lora = False
+                    turbo_4 = False
+                    steps = max(20, requested_steps)
+                    print("[Reference] Turbo LoRA bypassed: incompatible with ReferenceToVideo batch")
+                else:
+                    # Profiles 1-5 use four steps only because their Turbo LoRA
+                    # was trained for that schedule.  Ref2V cannot use that LoRA;
+                    # four ordinary steps caused the visibly poor references.
+                    steps = max(20, steps)
+                if video_edit:
+                    audio_index = ref_audios.index(exact_audio) + 1 if exact_audio in ref_audios else (1 if use_video_audio else None)
+                    edit_text = user_prompt.lower()
+                    camera_terms = (
+                        "camera", "framing", "frame only", "close-up", "close up", "extreme close",
+                        "shot size", "angle", "viewpoint", "zoom", "push-in", "push in", "pull-back",
+                        "pull back", "pan ", "tilt ", "crop", "focus tightly", "out of frame",
+                        "cámara", "camara", "encuadre", "reencuadra", "primer plano", "primerísimo",
+                        "primerisimo", "plano detalle", "ángulo", "angulo", "fuera de cuadro",
+                        "enfoca solamente", "enfoca solo", "solo sus labios", "only her lips", "only his lips"
+                    )
+                    camera_edit = any(term in edit_text for term in camera_terms)
+                    camera_scope = (
+                        "CAMERA RECOMPOSITION MODE: The user explicitly requests a new framing, shot size, viewpoint, crop, focus, or camera treatment. "
+                        "This requested camera/composition change has priority over the source framing and is not a continuity error. Preserve the same subject identity, "
+                        "performance, speech timing, body motion and scene time while rendering the requested new view. Content the user asks to keep out of frame must remain outside the frame."
+                        if camera_edit else
+                        "ATTRIBUTE/SCENE EDIT MODE: Preserve the source camera position, framing, composition, shot size, focus, cuts and camera motion unless the user explicitly changes one of them."
+                    )
+                    picture_defs = "\n".join(
+                        f"<Picture {i + 1}> provides the exact replacement appearance, identity, material, color, texture, or object requested for the edit."
+                        for i in range(len(ref_images)))
+                    picture_retention = "\n".join(
+                        f"<Picture {i + 1}>: attribute_transfer - transfer only the characteristics explicitly requested by the user to the corresponding target in <Video 1>; do not copy its background or unrelated content."
+                        for i in range(len(ref_images)))
+                    audio_def = (f"\n<Audio {audio_index}> is the synchronized source soundtrack of <Video 1>." if audio_index else "")
+                    audio_relation = ""
+                    soundscape = "Preserve the source video's soundscape and timing."
+                    task_audio = ""
+                    if audio_index:
+                        task_audio = " + audio reuse"
+                        if exact_audio_output == "reference":
+                            audio_relation = (f"\n<Audio {audio_index}>: partially_copy - preserve every existing audible layer clearly and add only audio explicitly requested by the user.")
+                            soundscape = f"<Audio {audio_index}> remains the clean foundation; add only explicitly requested sounds without doubling or deforming it."
+                        else:
+                            audio_relation = (f"\n<Audio {audio_index}>: fully_copy - reuse the complete source audio 1:1 without changing, regenerating, doubling, or deforming it.")
+                            soundscape = f"<Audio {audio_index}> is reused as the complete final soundtrack without alteration."
+                    picture_task = " + reference generation" if ref_images else ""
+                    prompt = (
+                        "subject_definitions:\n"
+                        "<Video 1> is the source video for the target video edit. Its composition, people, objects, actions, camera, lighting, timing, and continuity are the preservation baseline.\n"
+                        + (picture_defs + "\n" if picture_defs else "") + audio_def + "\n\n"
+                        "summary:\n"
+                        f"[video editing{picture_task}{task_audio}] The target video is an edited version of <Video 1>. Apply only the user's requested change and preserve everything else.\n\n"
+                        "retention_analysis:\n"
+                        "<Video 1> (complete visual and temporal structure): partially_preserved - preserve every unrequested person, object, motion, expression, cut, background, lighting condition, timing relationship and visual detail. "
+                        "Preserve the original camera and composition unless the user's instruction explicitly requests a camera, framing, crop, focus, viewpoint, shot-size or composition change; when it does, that requested recomposition must be fully applied.\n"
+                        + (picture_retention + "\n" if picture_retention else "") + audio_relation + "\n\n"
+                        "detailed_description:\n"
+                        "Reconstruct <Video 1> with the same timing and performance structure. Make the requested edit consistently in every frame where its target appears, including motion, occlusion, reflections and shadows. "
+                        "The user's explicit edit overrides only the corresponding preservation rule; all unrelated content remains unchanged.\n"
+                        + camera_scope + "\n"
+                        "USER EDIT INSTRUCTION:\n" + user_prompt + "\n\n"
+                        "overall_soundscape:\n" + soundscape + "\n\n"
+                        "non_diegetic_music:\nPreserve the source music. Add or replace music only if the user explicitly requests it."
+                    )
+                elif exact_audio:
+                    exact_audio_index = ref_audios.index(exact_audio) + 1
+                    if exact_audio_output == "original":
+                        prompt = (f"PRIMARY TIMELINE — <Audio {exact_audio_index}> is the complete source soundtrack. "
+                                  "Analyze its full timing before composing the video. Generate the visual sequence around this audio: "
+                                  "synchronize every cut, gesture, facial reaction, mouth movement, camera change and visible event to it. "
+                                  "The source audio will be preserved after visual generation, so prioritize exact visual synchronization.\n\n"
+                                  "USER VISUAL REQUEST:\n" + prompt)
+                    else:
+                        # Official H3 full-reference semantics: `partially_copy`
+                        # means the complete source signal remains the foundation
+                        # while explicitly requested layers may be added. This is
+                        # different from `reference`, which is allowed to recreate
+                        # and therefore deform voices, music and effects.
+                        prompt = (
+                            "subject_definitions:\n"
+                            f"<Audio {exact_audio_index}> is the complete source audio track. It may contain speech, singing, music, effects, ambience, or any combination of them.\n\n"
+                            "summary:\n"
+                            f"[reference generation + audio reuse] The target video is generated in exact synchronization with <Audio {exact_audio_index}>. "
+                            "The source track remains the clean audible foundation while only the new sounds explicitly requested below are added.\n\n"
+                            "retention_analysis:\n"
+                            f"<Audio {exact_audio_index}>: partially_copy - preserve the source track's complete content, words, voices, singing, melody, instrumentation, effects, timing, tempo, pitch, clarity, and stereo balance without deformation. "
+                            "Do not imitate, re-perform, double, phase, muffle, replace, or create a competing version of any existing layer. Add only sounds explicitly requested by the user.\n\n"
+                            "detailed_description:\n"
+                            f"Build the requested visuals around <Audio {exact_audio_index}> and keep every visible action, cut, mouth movement, performance and camera event synchronized to its timeline.\n"
+                            "USER REQUEST:\n" + prompt + "\n\n"
+                            "overall_soundscape:\n"
+                            f"<Audio {exact_audio_index}> remains clean and continuously audible. Any newly requested diegetic ambience or sound effects are added around it at a balanced level without masking or altering it.\n\n"
+                            "non_diegetic_music:\n"
+                            f"Preserve all music already present in <Audio {exact_audio_index}>. Add no replacement score unless the user explicitly requests one."
+                        )
                 g = build_ref_graph(prompt=prompt, width=width, height=height, length=length,
                                     seed=seed, steps=steps, ref_images=ref_images, ref_video=ref_video,
-                                    use_video_audio=bool(body.get("ref_video_audio", True)), ref_audios=ref_audios)
+                                    use_video_audio=use_video_audio, ref_audios=ref_audios)
             else:
                 g = build_graph(prompt=prompt, width=width, height=height, length=length,
                                 seed=seed, steps=steps, first_image=body.get("first_image") or None,
                                 last_image=body.get("last_image") or None)
+            if image_only and "91" in g:
+                # Five generated frames in a ~0.10 s container. /api/frame can
+                # then return frame 0, 2 or 4 as Inicio/Medio/Final.
+                g["91"]["inputs"]["fps"] = 48
             # Offload reduction (user toggle): keep more model resident in VRAM.
             # Helps short clips (fit VRAM); a no-op on big offload-bound jobs.
-            g = apply_turbo(g, body.get("turbo", "off"))
+            turbo_mode = body.get("turbo", "off")
+            firstblock = str(body.get("firstblock") or "off")
+            # FirstBlockCache replaces DiT blocks and intentionally conflicts
+            # with EasyCache. Keep the selected measured profile valid.
+            if firstblock != "off" and turbo_mode == "cache":
+                turbo_mode = "sage"
+            g = apply_firstblock(g, firstblock)
+            g = apply_turbo(g, turbo_mode)
             g = apply_turbo_lora(g, turbo_lora)
             g = apply_spectrum(g, bool(body.get("spectrum")), steps)
             g = apply_mem(g, body.get("mem_factor") or 1.0)
+            g = apply_int8_vae(g, vae_int8)
+            g = apply_compile_vae(g, compile_vae)
             g = apply_upscale(g, body.get("upscale", "off"))
             g = apply_model(g, body.get("model", "int8"))
             resp = comfy_post("/prompt", json.dumps({"prompt": g, "client_id": CLIENT_ID}).encode(),
@@ -796,22 +1209,44 @@ class Handler(BaseHTTPRequestHandler):
             pid = resp.get("prompt_id")
             with LOCK:
                 JOBS[pid] = {"t0": time.time(), "recorded": False,
-                             "meta": {"mode": ("audio_only" if audio_only else "image_only" if image_only else mode), "prompt": prompt,
+                             "exact_audio": exact_audio,
+                             "exact_audio_output": exact_audio_output,
+                             "video_edit_source": video_edit_source if video_edit else None,
+                             "video_edit_start": video_edit_start,
+                             "video_edit_end": video_edit_end,
+                             "video_edit_total": video_edit_total,
+                             "meta": {"mode": ("audio_only" if audio_only else "image_only" if image_only else "video_edit" if video_edit else mode), "prompt": user_prompt if video_edit else prompt,
                                       "width": width, "height": height, "seconds": seconds,
                                       "length": length, "seed": seed,
                                       "project": body.get("project") or "General",
-                                      "settings": {"steps": steps, "turbo": body.get("turbo", "off"),
+                                      "settings": {"steps": steps, "turbo": turbo_mode,
                                                    "turbo_lora": turbo_lora,
+                                                   "turbo_4": turbo_4,
                                                    "spectrum": bool(body.get("spectrum")),
+                                                   "firstblock": firstblock,
+                                                   "quick_profile": body.get("quick_profile"),
+                                                   "offload_profile": body.get("offload_profile"),
                                                    "mem_factor": body.get("mem_factor"),
+                                                   "compile_vae": compile_vae,
+                                                   "vae_int8": vae_int8,
                                                    "model": body.get("model", "int8"),
                                                    "upscale": body.get("upscale", "off"),
                                                    "aspect": body.get("aspect"),
+                                                   "image_capture": body.get("image_capture", "last"),
+                                                   "image_count": 3 if int(body.get("image_count") or 1) == 3 else 1,
                                                    "width": width, "height": height,
-                                                   "seconds": seconds}}}
+                                                    "seconds": seconds,
+                                                    "exact_audio": bool(exact_audio),
+                                                    "exact_audio_output": exact_audio_output,
+                                                    "video_edit": video_edit,
+                                                    "video_edit_start": video_edit_start,
+                                                    "video_edit_end": video_edit_end}}}
                 PROGRESS[pid] = {"pct": 0.0, "stage": "Enviando…", "band": (0, 2), "eta": None}
                 CURRENT_PID[0] = pid
-            return self._send(200, {"prompt_id": pid, "seed": seed, "length": length})
+            return self._send(200, {"prompt_id": pid, "seed": seed,
+                                    "length": int(round(video_edit_total * 24)) if video_edit else length,
+                                    "width": video_edit_width if video_edit else width,
+                                    "height": video_edit_height if video_edit else height})
         except urllib.error.HTTPError as e:
             return self._send(502, {"error": "ComfyUI: " + e.read().decode()[:500]})
         except Exception as e:  # noqa
@@ -888,6 +1323,7 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(raw or b"{}")
             src = os.path.basename(str(body.get("source", "")))
             upscale = str(body.get("upscale", "esrgan_2x"))
+            image_only = bool(body.get("image_only"))
             engine, sc = _parse_upscale(upscale)
             if engine is None:
                 return self._send(400, {"error": "Opción de escalado inválida."})
@@ -912,7 +1348,7 @@ class Handler(BaseHTTPRequestHandler):
             length = int(round(seconds * 24)) or 1
             with LOCK:
                 JOBS[pid] = {"t0": time.time(), "recorded": False,
-                             "meta": {"mode": f"upscale {engine} {sc}x", "prompt": f"Escalado {engine} {sc}x: {src}",
+                             "meta": {"mode": ("image_only" if image_only else f"upscale {engine} {sc}x"), "prompt": f"Escalado {engine} {sc}x: {src}",
                                       "width": w * sc, "height": h * sc, "seconds": round(seconds, 2),
                                       "length": length, "seed": 0, "project": project_of(src)}}
                 PROGRESS[pid] = {"pct": 0.0, "stage": "Escalando…", "band": (0, 2), "eta": None}
@@ -1160,7 +1596,19 @@ class Handler(BaseHTTPRequestHandler):
         entry = hist[pid]
         st = entry.get("status", {})
         if st.get("status_str") == "error":
-            return self._send(200, {"status": "error", "error": "La generación falló en ComfyUI."})
+            detail = ""
+            for msg in st.get("messages", []) or []:
+                payload = None
+                if isinstance(msg, (list, tuple)) and len(msg) > 1:
+                    payload = msg[1]
+                elif isinstance(msg, dict):
+                    value = msg.get("value")
+                    payload = value[1] if isinstance(value, (list, tuple)) and len(value) > 1 else msg
+                if isinstance(payload, dict) and payload.get("exception_message"):
+                    detail = str(payload["exception_message"]).strip().splitlines()[0]
+                    break
+            text = f"ComfyUI: {detail}" if detail else "La generación falló en ComfyUI."
+            return self._send(200, {"status": "error", "error": text})
         name = None
         for out in entry.get("outputs", {}).values():
             for arr in out.values():
@@ -1173,6 +1621,8 @@ class Handler(BaseHTTPRequestHandler):
         gen = None
         with LOCK:
             job = JOBS.get(pid)
+            if job and job.get("finalize_error"):
+                return self._send(200, {"status": "error", "error": "Falló la salida con audio original limpio: " + job["finalize_error"]})
             if job and not job["recorded"]:
                 gen = time.time() - job["t0"]
                 job["recorded"] = True
@@ -1192,6 +1642,36 @@ class Handler(BaseHTTPRequestHandler):
                     print("[Extend] concat failed, keeping continuation only:", e)
                     final_name = name
                 job["final_name"] = final_name
+            if job.get("exact_audio"):
+                if job.get("exact_audio_output") == "original":
+                    # Ref2VA already generated the visuals from this soundtrack.
+                    # Keep those visuals, discard H3's noisy regenerated track,
+                    # and attach only the clean source audio (never mix both).
+                    try:
+                        final_name = _attach_clean_source_audio(name, job["exact_audio"])
+                        job["final_name"] = final_name
+                        meta["mode"] = "audio_to_video_clean"
+                    except Exception as e:  # noqa
+                        job["finalize_error"] = str(e)
+                        print("[Audio→Video] clean source audio failed:", e)
+                        return self._send(200, {"status": "error", "error": "El video fue generado, pero falló la conservación del audio original: " + str(e)})
+                else:
+                    # Keep H3's native regenerated soundtrack so prompts may add
+                    # beach, wind, music or other requested surrounding audio.
+                    meta["mode"] = "audio_to_video_partial_copy"
+            if job.get("video_edit_source"):
+                try:
+                    final_name, total_frames, out_w, out_h, total_secs = _splice_video_edit(
+                        job["video_edit_source"], final_name,
+                        job.get("video_edit_start", 0), job.get("video_edit_end", 0))
+                    job["final_name"] = final_name
+                    meta["mode"] = "video_edit"
+                    meta["width"] = out_w; meta["height"] = out_h
+                    meta["length"] = total_frames; meta["seconds"] = round(total_secs, 3)
+                except Exception as e:  # noqa
+                    job["finalize_error"] = str(e)
+                    print("[Video edit] splice failed:", e)
+                    return self._send(200, {"status": "error", "error": "H3 generó el cambio, pero falló la unión con el video original: " + str(e)})
             try:
                 record_video(meta, gen, final_name)
             except Exception as e:  # noqa
@@ -1380,20 +1860,19 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:  # noqa
             self._send(502, {"error": str(e)})
 
-    def _frame(self, name):
-        """Extract (and cache) the first frame of an output video as a JPG and
-        serve it. Used by image-only mode (5-frame render, we keep one frame)."""
+    def _frame(self, name, position="last"):
+        """Serve Inicio/Medio/Final from an image-only five-frame render."""
         if not name:
             return self._send(400, {"error": "missing name"})
         base = os.path.basename(name)
         src = os.path.join(OUTPUT_DIR, "video", base)
         if not os.path.isfile(src):
             return self._send(404, {"error": "video no encontrado"})
-        jpg = os.path.splitext(src)[0] + "_frame.jpg"
+        position = position if position in ("first", "middle", "last") else "last"
+        jpg = os.path.splitext(src)[0] + f"_{position}frame.jpg"
         if not os.path.isfile(jpg):
             try:
-                subprocess.run([FFMPEG, "-y", "-i", src, "-vframes", "1", "-q:v", "2", jpg],
-                               capture_output=True, timeout=60)
+                _extract_still(src, jpg, position)
             except Exception as e:  # noqa
                 return self._send(502, {"error": "ffmpeg: " + str(e)})
         if not os.path.isfile(jpg):
@@ -1404,13 +1883,110 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Content-Disposition", f'inline; filename="{os.path.splitext(base)[0]}.jpg"')
+            self.send_header("Content-Disposition", f'inline; filename="{os.path.splitext(base)[0]}_{position}.jpg"')
             self.end_headers()
             self.wfile.write(data)
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception as e:  # noqa
             self._send(502, {"error": str(e)})
+
+    def _prepare_reference(self, raw):
+        """Convert a library creation into a real ComfyUI input reference.
+        Image/audio creations are stored internally as tiny MP4 containers, so
+        extract their intended media; regular videos are copied unchanged."""
+        try:
+            body = json.loads(raw or b"{}")
+            base = os.path.basename(str(body.get("name") or ""))
+            kind = str(body.get("kind") or "video")
+            position = str(body.get("position") or "last")
+            if position not in ("first", "middle", "last"):
+                position = "last"
+            at = body.get("at")
+            try:
+                at = None if at is None else max(0.0, float(at))
+            except (TypeError, ValueError):
+                at = None
+            if kind not in ("image", "audio", "video") or not base:
+                return self._send(400, {"error": "referencia inválida"})
+            src = os.path.join(OUTPUT_DIR, "video", base)
+            if not os.path.isfile(src):
+                return self._send(404, {"error": "creación no encontrada"})
+            os.makedirs(INPUT_DIR, exist_ok=True)
+            stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", os.path.splitext(base)[0])
+            if kind == "video":
+                name = f"ref_{stem}.mp4"
+                shutil.copyfile(src, os.path.join(INPUT_DIR, name))
+            elif kind == "image":
+                suffix = f"t{int(round(at * 1000)):09d}" if at is not None else position
+                name = f"ref_{stem}_{suffix}.jpg"
+                dst = os.path.join(INPUT_DIR, name)
+                ok = _extract_still_at(src, dst, at) if at is not None else _extract_still(src, dst, position)
+                if not ok:
+                    raise RuntimeError("no se pudo extraer la imagen")
+            else:
+                name = f"ref_{stem}.mp3"
+                dst = os.path.join(INPUT_DIR, name)
+                r = subprocess.run([FFMPEG, "-y", "-i", src, "-vn", "-q:a", "2", dst],
+                                   capture_output=True, timeout=60)
+                if r.returncode != 0 or not os.path.isfile(dst):
+                    raise RuntimeError("no se pudo extraer el audio")
+            duration = None
+            probe_path = os.path.join(INPUT_DIR, name)
+            vals = _ffprobe(probe_path, "format=duration", stream=False)
+            try:
+                duration = round(float(vals[0]), 3) if vals else None
+            except (ValueError, IndexError):
+                duration = None
+            width = height = None
+            if kind == "video":
+                dims = _ffprobe(src, "stream=width,height")
+                try:
+                    width = int(dims[0]); height = int(dims[1])
+                except (ValueError, IndexError):
+                    width = height = None
+            return self._send(200, {"ok": True, "name": name, "kind": kind,
+                                    "duration": duration, "width": width, "height": height})
+        except Exception as e:  # noqa
+            return self._send(500, {"error": str(e)})
+
+    def _replace_audio(self, raw):
+        """Replace an exact time range of an audio-only creation with newly
+        generated audio, preserving the rest sample-for-sample through ffmpeg."""
+        try:
+            body = json.loads(raw or b"{}")
+            source = os.path.basename(str(body.get("source") or ""))
+            replacement = os.path.basename(str(body.get("replacement") or ""))
+            src = os.path.join(OUTPUT_DIR, "video", source)
+            rep = os.path.join(OUTPUT_DIR, "video", replacement)
+            if not os.path.isfile(src) or not os.path.isfile(rep):
+                return self._send(404, {"error": "audio fuente o reemplazo no encontrado"})
+            dur_info = _ffprobe(src, "format=duration", stream=False)
+            total = float(dur_info[0]) if dur_info else 0.0
+            start = max(0.0, min(total, float(body.get("start") or 0)))
+            end = max(start + 0.05, min(total, float(body.get("end") or total)))
+            seg = end - start
+            out_name = f"MiniMaxStudio_audioedit_{int(time.time())}.mp4"
+            out = os.path.join(OUTPUT_DIR, "video", out_name)
+            filt = (f"[0:a]atrim=0:{start:.4f},asetpts=PTS-STARTPTS[a0];"
+                    f"[1:a]atrim=0:{seg:.4f},apad=pad_dur={seg:.4f},atrim=0:{seg:.4f},asetpts=PTS-STARTPTS[a1];"
+                    f"[0:a]atrim=start={end:.4f},asetpts=PTS-STARTPTS[a2];"
+                    "[a0][a1][a2]concat=n=3:v=0:a=1[a]")
+            cmd = [FFMPEG, "-y", "-i", src, "-i", rep,
+                   "-f", "lavfi", "-i", f"color=c=black:s=64x64:r=24:d={total:.4f}",
+                   "-filter_complex", filt, "-map", "2:v:0", "-map", "[a]", "-shortest",
+                   "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                   "-c:a", "aac", "-b:a", "192k", out]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            if r.returncode != 0 or not os.path.isfile(out):
+                raise RuntimeError((r.stderr or "ffmpeg no pudo editar el audio")[-400:])
+            record_video({"mode": "audio_only", "prompt": str(body.get("prompt") or "Audio editado"),
+                          "width": 64, "height": 64, "seconds": total,
+                          "length": int(round(total * 24)), "seed": 0,
+                          "project": project_of(source)}, 0, out_name)
+            return self._send(200, {"ok": True, "name": out_name, "seconds": total})
+        except Exception as e:  # noqa
+            return self._send(500, {"error": str(e)})
 
     def _upload(self, raw):
         """Write an uploaded media file (image / video / audio) straight into

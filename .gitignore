@@ -3,6 +3,7 @@ studio.db
 studio.db-journal
 studio.db-wal
 studio.db-shm
+studio_config.json
 
 # Python
 __pycache__/
@@ -20,3 +21,8 @@ Thumbs.db
 # Logs / temp
 *.log
 scratchpad/
+_backups/
+_research/
+_rejected/
+comfy-fast/
+fast-packages/
